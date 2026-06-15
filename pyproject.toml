@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fwh-sentinel2"
+version = "0.1.0"
+description = "Sentinel-2 land-cover change (STAC + Cloud-Optimized GeoTIFF → NDVI/composite → difference/classify → MapLibre tiled map) as Facetwork workflows + handlers"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "Apache-2.0"}
+authors = [{name = "Ralph Lemke"}]
+keywords = ["facetwork", "ffl", "sentinel-2", "stac", "cog", "ndvi", "land-cover", "change-detection", "maplibre"]
+
+dependencies = [
+    "facetwork>=0.31.0",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+# The real (non-mock) path: STAC search + COG window-reads + tiling.
+geo = [
+    "requests>=2.28",
+    "rio-tiler>=6",   # pulls rasterio + morecantile
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.8.0",
+]
+
+[project.urls]
+Repository = "https://github.com/rlemke/fwh_sentinel2"
+
+[project.entry-points."facetwork.examples"]
+sentinel2-landchange = "sentinel2:example"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sentinel2 = [
+    "ffl/*.ffl",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["E501", "E402", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "src/sentinel2/handlers"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
