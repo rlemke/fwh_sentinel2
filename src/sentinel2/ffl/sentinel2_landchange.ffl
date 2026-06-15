@@ -193,6 +193,24 @@ namespace s2.render {
         with Cost(tier = "cheap")
 }
 
+namespace s2.geo {
+    /** Resolve a place name to an AOI bbox via the OpenStreetMap Nominatim
+      * geocoder. `buffer_km > 0` (default) returns a box of that half-size
+      * centered on the place's point — practical, since a municipality's full
+      * polygon (e.g. Apuí ~54,000 km²) would fan out into hundreds of scenes;
+      * `buffer_km = 0` uses the geocoder's own bounding box. Returns the
+      * "min_lon,min_lat,max_lon,max_lat" string the analysis consumes. */
+    event facet ResolveAOI(
+        place: String,
+        buffer_km: Double = 10.0,
+        nominatim_url: String = "https://nominatim.openstreetmap.org",
+        use_mock: Boolean = false
+    ) => (aoi: String, lat: Double, lon: Double, display_name: String, used_mock: Boolean)
+        with RetryPolicy()
+        with Effect(kind = "external")
+        with Cost(tier = "cheap")
+}
+
 namespace s2.workflows {
     /** End-to-end land-cover change for one AOI between a baseline and a recent
       * window. Per epoch: STAC search -> per-scene fan-out (ScanScenes) ->
@@ -253,6 +271,44 @@ namespace s2.workflows {
                 status = "completed",
                 html_path = map.html_path,
                 detail = "change " ++ change.method ++ " loss " ++ change.pct_loss ++ " gain " ++ change.pct_gain
+            )
+        }
+
+    /** Land-cover change for a named place: geocode the name to an AOI bbox
+      * (s2.geo.ResolveAOI), then run the full AnalyzeAOI pipeline on it. So
+      * `place = "Apuí, Amazonas, Brazil"` resolves to a box and reports the
+      * forest loss/gain there. `buffer_km` sets the box half-size (10 km
+      * default). use_mock=true runs the whole chain — geocode included —
+      * offline. */
+    workflow AnalyzeRegion(
+        place: String = "Apuí, Amazonas, Brazil",
+        buffer_km: Double = 10.0,
+        baseline_from: String = "2019-07-01",
+        baseline_to: String = "2019-09-30",
+        recent_from: String = "2024-07-01",
+        recent_to: String = "2024-09-30",
+        index: String = "ndvi",
+        max_cloud: Double = 40.0,
+        method: String = "classify",
+        threshold: Double = 0.15,
+        use_mock: Boolean = false
+    ) => (status: String, html_path: String, detail: String, aoi: String)
+        with Author(email = "research@example.com")
+        with Teams(names = ["geo", "research"])
+        andThen {
+            loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            run = AnalyzeAOI(
+                aoi = loc.aoi,
+                baseline_from = $.baseline_from, baseline_to = $.baseline_to,
+                recent_from = $.recent_from, recent_to = $.recent_to,
+                index = $.index, max_cloud = $.max_cloud,
+                method = $.method, threshold = $.threshold, use_mock = $.use_mock
+            )
+            yield AnalyzeRegion(
+                status = run.status,
+                html_path = run.html_path,
+                aoi = loc.aoi,
+                detail = loc.display_name ++ " [" ++ loc.aoi ++ "] " ++ run.detail
             )
         }
 }

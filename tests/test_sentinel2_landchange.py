@@ -47,9 +47,33 @@ def test_ffl_compiles_and_validates():
 
 def test_ffl_defines_expected_workflows_and_facets():
     text = _FFL.read_text()
-    for name in ["AnalyzeAOI", "ScanScenes", "SearchScenes", "FetchSceneIndex",
-                 "Composite", "DetectChange", "ChangeMap"]:
+    for name in ["AnalyzeAOI", "AnalyzeRegion", "ResolveAOI", "ScanScenes", "SearchScenes",
+                 "FetchSceneIndex", "Composite", "DetectChange", "ChangeMap"]:
         assert name in text, f"missing declaration {name}"
+
+
+def test_geocode_resolve_mock(tools_env):
+    from _s2_tools import geocode, stac
+
+    res = geocode.resolve("Apuí, Amazonas, Brazil", buffer_km=10.0, use_mock=True)
+    assert res["used_mock"] is True and res["display_name"]
+    # the resolved aoi must be a valid bbox the rest of the pipeline can parse
+    w, s, e, n = stac.parse_bbox(res["aoi"])
+    assert w < e and s < n
+    # deterministic
+    assert geocode.resolve("Apuí, Amazonas, Brazil", buffer_km=10.0, use_mock=True)["aoi"] == res["aoi"]
+    # bigger buffer -> bigger box
+    big = geocode.resolve("Apuí, Amazonas, Brazil", buffer_km=40.0, use_mock=True)
+    bw, bs, be, bn = stac.parse_bbox(big["aoi"])
+    assert (be - bw) > (e - w)
+
+
+def test_resolve_aoi_handler(tools_env):
+    from sentinel2.handlers.geo.geo_handlers import handle_resolve_aoi
+    from _s2_tools import stac
+
+    res = handle_resolve_aoi({"place": "Novo Progresso", "buffer_km": 8.0, "use_mock": True})
+    assert res["aoi"] and stac.parse_bbox(res["aoi"])
 
 
 # ── offline mock chain through _s2_tools ───────────────────────────────────────

@@ -18,6 +18,6 @@ _TOOLS_ROOT = Path(__file__).resolve().parents[2] / "tools"
 if str(_TOOLS_ROOT) not in sys.path:
     sys.path.insert(0, str(_TOOLS_ROOT))
 
-from _s2_tools import map_render, raster, sidecar, stac, storage  # noqa: E402,F401
+from _s2_tools import geocode, map_render, raster, sidecar, stac, storage  # noqa: E402,F401
 
-__all__ = ["map_render", "raster", "sidecar", "stac", "storage"]
+__all__ = ["geocode", "map_render", "raster", "sidecar", "stac", "storage"]
