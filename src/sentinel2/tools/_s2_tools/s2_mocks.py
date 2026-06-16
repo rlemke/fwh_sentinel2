@@ -9,6 +9,7 @@ imagery flows through the same function signatures in ``stac`` / ``raster``.
 from __future__ import annotations
 
 import hashlib
+from datetime import date, timedelta
 
 # Small synthetic raster size for the mock (keeps fixtures tiny).
 MOCK_W = 16
@@ -55,3 +56,29 @@ def mock_index_grid(scene_id: str, aoi: str, index: str) -> list[list[float]]:
             row.append(round(max(-1.0, min(1.0, v + noise)), 4))
         grid.append(row)
     return grid
+
+
+def mock_lake_level(site_id: str, date_from: str, date_to: str) -> dict:
+    """A deterministic weekly elevation series in plausible Great-Salt-Lake range
+    (~4188–4196 ft): a slow decline to a mid-window trough (mirroring the 2022
+    record low) and a partial recovery, plus tiny per-week jitter. Offline."""
+    start = date.fromisoformat(date_from)
+    end = date.fromisoformat(date_to)
+    span = max((end - start).days, 1)
+    series = []
+    d = start
+    while d <= end:
+        t = (d - start).days / span  # 0..1
+        # V-shape: 4196 -> ~4189 trough at t=0.85 -> small rebound.
+        trough = 0.85
+        if t <= trough:
+            elev = 4196.0 - 7.0 * (t / trough)
+        else:
+            elev = 4189.0 + 5.0 * ((t - trough) / (1 - trough))
+        jitter = ((_seed(site_id, d.isoformat()) % 11) - 5) / 100.0  # ±0.05
+        series.append({"date": d.isoformat(), "value": round(elev + jitter, 2)})
+        d += timedelta(days=7)
+    vals = [p["value"] for p in series]
+    return {"site_id": site_id, "site_name": f"MOCK LAKE {site_id}", "unit": "ft",
+            "series": series, "point_count": len(series),
+            "min": round(min(vals), 2), "max": round(max(vals), 2)}

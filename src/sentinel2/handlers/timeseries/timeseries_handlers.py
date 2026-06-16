@@ -6,19 +6,27 @@ import logging
 import os
 from typing import Any
 
-from ..shared.s2_utils import timeseries
+from ..shared.s2_utils import level, timeseries
 
 logger = logging.getLogger("s2.timeseries")
 NAMESPACE = "s2.timeseries"
 
 
 def handle_water_timeseries_map(params: dict[str, Any]) -> dict[str, Any]:
+    # Optional water-*level* overlay: a cached USGS gauge series, located by the
+    # relative_path that FetchLakeLevel returned. Loaded from cache here (io); the
+    # network fetch is its own (external) FetchLakeLevel step.
+    level_series = None
+    rel = params.get("level_relative_path", "")
+    if rel:
+        level_series = level.load_series(rel)
     return timeseries.render_water_timeseries(
         aoi=params["aoi"],
         index=params.get("index", "ndwi"),
         water_threshold=float(params.get("water_threshold", 0.1)),
         title=params.get("title", "Surface water over time"),
         basemap_url=params.get("basemap_url", ""),
+        level=level_series,
     )
 
 

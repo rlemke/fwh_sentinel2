@@ -8,9 +8,9 @@ chart of water area (km²) over time. So you scrub the years and watch the lake
 shrink.
 
 Output bundle: ``output/s2-timeseries/<aoi_key>/{index.html, tiles/<year>/{z}/{x}/{y}.png}``.
-Honest range note: Sentinel-2 starts ~2017, so a true 20-year span needs a
-Landsat source (requester-pays on AWS / signed on Planetary Computer) — a
-drop-in s2.source sibling.
+Pass ``collection="landsat-c2-l2"`` upstream for a true multi-decade span (~1984+).
+Supply a ``level`` series (USGS gauge, see ``_s2_tools.level``) to overlay lake
+*height* on water *footprint* in the chart.
 """
 
 from __future__ import annotations
@@ -37,7 +37,12 @@ def _area_km2(bounds, shape, n_px: int) -> float:
 def render_water_timeseries(
     aoi: str, *, index: str = "ndwi", water_threshold: float = 0.1,
     title: str = "Surface water over time", basemap_url: str = "",
+    level: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Render the per-year water-extent viewer. If ``level`` (a cached USGS
+    elevation series, see ``level.fetch_lake_level``) is supplied, the chart
+    gains a second axis overlaying lake *height* (gauge) on water *footprint*
+    (satellite) — they track, non-linearly."""
     ak = raster.aoi_key(aoi)
     # Discover per-year composites: COMPOSITE/<ak>/<index>/<YYYY>-..._<YYYY>-....npz
     rels = [r for r in sidecar.list_entries(raster.COMPOSITE) if r.startswith(f"{ak}/{index}/")]
@@ -104,17 +109,36 @@ def render_water_timeseries(
                             storage.join(ytiles, str(t.z), str(t.x), f"{t.y}.png"),
                             img.render(img_format="PNG", add_mask=True))
 
-    html = _html(title, series, bounds_out, minz, maxz, geo, basemap_url)
+    level_cfg = _level_cfg(level, series) if level else None
+    html = _html(title, series, bounds_out, minz, maxz, geo, basemap_url, level_cfg)
     html_path = storage.join(out_dir, "index.html")
     storage.write_text(html_path, html)
     return {"aoi_key": ak, "output_dir": out_dir, "html_path": html_path,
-            "year_count": len(years)}
+            "year_count": len(years), "has_level": bool(level_cfg)}
 
 
-def _html(title, series, bounds, minz, maxz, geo, basemap_url) -> str:
+def _level_cfg(level: dict[str, Any], series: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Project the daily elevation series + per-year extent onto a shared linear
+    (fractional-year) x axis, thinning the level line for a light HTML."""
+    from _s2_tools import level as lvl
+
+    pts = level.get("series") or []
+    if not pts:
+        return None
+    step = max(1, len(pts) // 600)  # cap embedded points
+    line = [[lvl.decimal_year(p["date"]), p["value"]] for p in pts[::step]]
+    # extent epochs at ~mid-window (mid-July ≈ year + 0.54) so points align in x.
+    extent_pts = [[float(s["year"]) + 0.54, s["area_km2"]] for s in series]
+    return {"unit": level.get("unit", "ft"), "line": line, "extentPoints": extent_pts,
+            "min": level.get("min"), "max": level.get("max"),
+            "siteName": level.get("site_name", "")}
+
+
+def _html(title, series, bounds, minz, maxz, geo, basemap_url, level=None) -> str:
     basemap = [basemap_url] if basemap_url else map_render._BASEMAP
     cfg = {"series": series, "bounds": bounds, "minz": minz, "maxz": maxz,
-           "basemap": basemap, "basemapAttr": map_render._BASEMAP_ATTR, "geo": geo}
+           "basemap": basemap, "basemapAttr": map_render._BASEMAP_ATTR, "geo": geo,
+           "level": level}
     return _TS_HTML.replace("__TITLE__", title).replace("__CFG__", json.dumps(cfg))
 
 
@@ -140,7 +164,7 @@ _TS_HTML = """<!DOCTYPE html>
 </style></head><body>
 <div id="m"></div>
 <div class="panel">
- <h3>__TITLE__</h3><div class="sub">water extent (NDWI) — scrub the years</div>
+ <h3>__TITLE__</h3><div class="sub" id="sub">water extent (NDWI) — scrub the years</div>
  <div class="tabs" id="tabs"></div>
  <div class="yearrow"><span class="ybadge" id="ylabel"></span>
    <input type="range" id="slider" min="0" value="0" step="1">
@@ -165,16 +189,39 @@ S.forEach(function(s,i){var b=document.createElement('button');b.textContent=s.y
 function show(i){
   slider.value=i;
   document.getElementById('ylabel').textContent=S[i].year;
-  document.getElementById('area').textContent=S[i].area_km2+' km²';
+  var lvltxt='';
+  if(cfg.level){var e=cfg.level.extentPoints[i];lvltxt=nearestLevel(e[0]);}
+  document.getElementById('area').textContent=S[i].area_km2+' km²'+(lvltxt?' · '+lvltxt+cfg.level.unit:'');
   tabs.querySelectorAll('button').forEach(function(b,j){b.classList.toggle('on',j===i);});
   if(cfg.geo&&map.getLayer)S.forEach(function(s,j){if(map.getLayer(layerId(j)))map.setLayoutProperty(layerId(j),'visibility',j===i?'visible':'none');});
-  if(window._chart){window._chart.data.datasets[0].pointRadius=S.map(function(_,j){return j===i?6:3;});window._chart.update();}
+  if(window._chart){var d=window._chart.data.datasets[window._extentDs];d.pointRadius=S.map(function(_,j){return j===i?7:(cfg.level?4:3);});window._chart.update();}
 }
+function nearestLevel(x){var L=cfg.level.line,best=null,bd=1e9;for(var k=0;k<L.length;k++){var dd=Math.abs(L[k][0]-x);if(dd<bd){bd=dd;best=L[k][1];}}return best!=null?best.toFixed(2):'';}
 slider.oninput=function(){show(+slider.value);};
-new Chart(document.getElementById('chart'),{type:'line',
-  data:{labels:S.map(function(s){return s.year;}),datasets:[{label:'water km²',data:S.map(function(s){return s.area_km2;}),borderColor:'#2166ac',backgroundColor:'rgba(33,102,172,.15)',fill:true,tension:.25,pointRadius:3}]},
-  options:{plugins:{legend:{display:false}},onClick:function(e,el){if(el.length)show(el[0].index);},scales:{y:{title:{display:true,text:'km²'}}}}});
-window._chart=Chart.getChart('chart');
+function buildChart(){
+  var ctx=document.getElementById('chart');
+  if(cfg.level){
+    var L=cfg.level;window._extentDs=1;
+    document.getElementById('sub').textContent='water extent (NDWI, km²) vs. lake level (gauge, '+L.unit+')';
+    window._chart=new Chart(ctx,{type:'line',
+      data:{datasets:[
+        {label:'level ('+L.unit+')',yAxisID:'yL',data:L.line.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#b2182b',borderWidth:1.5,pointRadius:0,tension:0},
+        {label:'water km²',yAxisID:'yR',data:L.extentPoints.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#2166ac',backgroundColor:'rgba(33,102,172,.15)',showLine:true,fill:false,tension:.25,pointRadius:4}
+      ]},
+      options:{interaction:{mode:'nearest'},
+        plugins:{legend:{display:true,labels:{boxWidth:10,font:{size:11}}}},
+        onClick:function(e,el){for(var k=0;k<el.length;k++){if(el[k].datasetIndex===1){show(el[k].index);break;}}},
+        scales:{x:{type:'linear',title:{display:true,text:'year'},ticks:{stepSize:2,callback:function(v){return v.toFixed(0);}}},
+          yL:{position:'left',title:{display:true,text:'level ('+L.unit+')'}},
+          yR:{position:'right',title:{display:true,text:'water km²'},grid:{drawOnChartArea:false}}}}});
+  }else{
+    window._extentDs=0;
+    window._chart=new Chart(ctx,{type:'line',
+      data:{labels:S.map(function(s){return s.year;}),datasets:[{label:'water km²',data:S.map(function(s){return s.area_km2;}),borderColor:'#2166ac',backgroundColor:'rgba(33,102,172,.15)',fill:true,tension:.25,pointRadius:3}]},
+      options:{plugins:{legend:{display:false}},onClick:function(e,el){if(el.length)show(el[0].index);},scales:{y:{title:{display:true,text:'km²'}}}}});
+  }
+}
+buildChart();
 show(0);
 </script></body></html>
 """

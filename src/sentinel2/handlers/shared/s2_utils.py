@@ -20,6 +20,7 @@ if str(_TOOLS_ROOT) not in sys.path:
 
 from _s2_tools import (  # noqa: E402,F401
     geocode,
+    level,
     map_render,
     raster,
     sidecar,
@@ -28,4 +29,5 @@ from _s2_tools import (  # noqa: E402,F401
     timeseries,
 )
 
-__all__ = ["geocode", "map_render", "raster", "sidecar", "stac", "storage", "timeseries"]
+__all__ = ["geocode", "level", "map_render", "raster", "sidecar", "stac", "storage",
+           "timeseries"]

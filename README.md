@@ -88,6 +88,29 @@ scripts/ffl-run "$FFL" --workflow s2.workflows.WaterTimeSeries \
 >   --inputs '{"place":"Antelope Island, Utah","buffer_km":20,"collection":"landsat-c2-l2","years":["2004","2009","2014","2019","2022","2024"],"index":"ndwi","water_threshold":0.0,"max_cloud":25,"use_mock":false}' --task-list s2
 > ```
 
+### Water level vs. extent (`WaterLevelTimeSeries`)
+
+Water *extent* (NDWI) is the lake's **footprint** (km², from the satellite); water
+*level* is its **surface height** (ft, from a gauge — not the satellite). They
+track, but **non-linearly**: the Great Salt Lake is a flat pan, so a ~6 ft level
+drop bares hundreds of km². `s2.workflows.WaterLevelTimeSeries` runs the same
+per-year extent fan-out **and** fetches the lake's **USGS NWIS** daily elevation
+(`s2.level.FetchLakeLevel`, free, no auth — *US gauges only*), then overlays both
+on one **dual-axis** chart (level left, area right) with the year tab bar. Over
+2004→2024 on the Great Salt Lake the two bottom out together in **2022** (gauge
+4190.0 ft, extent its minimum) and recover by 2024 — an independent gauge
+corroborating the satellite.
+
+```bash
+scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
+  --inputs '{"place":"Antelope Island, Utah","buffer_km":20,"site_id":"10010000","date_from":"2003-07-01","date_to":"2024-12-31","years":["2004","2009","2014","2019","2022","2024"],"collection":"landsat-c2-l2","water_threshold":0.0,"max_cloud":25,"use_mock":false}' --task-list s2
+```
+
+> The default gauge (`10010000`, param `62614`) is the Great Salt Lake south arm;
+> its level is for that arm while the extent AOI may span both arms (the causeway
+> separates them), so don't expect a perfectly monotone area↔height map — the
+> joint 2022 minimum and overall trend are the signal.
+
 ## Run
 
 ```bash

@@ -219,6 +219,52 @@ def test_water_timeseries(tools_env):
         pass
 
 
+def test_lake_level_mock_and_overlay(tools_env):
+    """Mock USGS level series caches + round-trips, and the time-series renderer
+    overlays it (dual-axis chart) on the per-year water extent."""
+    from _s2_tools import level, raster, stac, timeseries
+
+    lv = level.fetch_lake_level("10010000", "2018-01-01", "2022-12-31", use_mock=True)
+    assert lv["unit"] == "ft" and lv["point_count"] > 0
+    assert lv["series"][0]["value"] > 4000  # plausible GSL elevation
+    # cache round-trip via the relative_path the renderer uses
+    again = level.load_series(lv["relative_path"])
+    assert again["point_count"] == lv["point_count"]
+
+    aoi = "-112.50,41.00,-112.30,41.20"
+    years = ["2018", "2020", "2022"]
+    for yr in years:
+        win = (f"{yr}-07-01", f"{yr}-09-30")
+        scenes = stac.search(aoi, *win, use_mock=True)
+        for s in scenes:
+            raster.fetch_scene_index(s["scene_id"], aoi, index="ndwi", use_mock=True)
+        raster.composite(aoi, *win, scene_ids=[s["scene_id"] for s in scenes],
+                         index="ndwi", use_mock=True)
+
+    bundle = timeseries.render_water_timeseries(aoi, index="ndwi", water_threshold=0.0, level=lv)
+    assert bundle["has_level"] is True
+    html = Path(bundle["html_path"]).read_text()
+    assert '"level":' in html and '"line":' in html        # level embedded
+    assert "yAxisID:'yL'" in html and "yAxisID:'yR'" in html  # dual axis
+
+    # handler dispatch for the level facet
+    from sentinel2.handlers.level.level_handlers import handle_fetch_lake_level
+    hr = handle_fetch_lake_level({"site_id": "10010000", "date_from": "2018-01-01",
+                                  "date_to": "2019-12-31", "use_mock": True})
+    assert hr["point_count"] > 0 and hr["relative_path"]
+
+
+@pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
+                    reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
+def test_real_lake_level_live(tools_env):
+    """Live USGS NWIS daily elevation for the Great Salt Lake gauge."""
+    from _s2_tools import level
+
+    lv = level.fetch_lake_level("10010000", "2020-01-01", "2022-12-31", use_mock=False)
+    assert lv["point_count"] > 300 and lv["unit"] == "ft"
+    assert 4180 < lv["min"] < lv["max"] < 4220  # GSL elevation band, ft NGVD29
+
+
 def test_unknown_method_rejected(tools_env):
     from _s2_tools import raster, stac
 

@@ -210,9 +210,36 @@ namespace s2.timeseries {
         water_threshold: Double = 0.1,
         title: String = "Surface water over time",
         basemap_url: String = "",
+        level_relative_path: String = "",
         dependency_signal: Long = 0
     ) => (aoi_key: String, output_dir: String, html_path: String, year_count: Int)
         with Effect(kind = "io")
+        with Cost(tier = "cheap")
+}
+
+namespace s2.level {
+    /** Daily lake-surface elevation (water *level*) from the USGS NWIS Daily
+      * Values service — the gauge counterpart to NDWI water *extent*. Free, no
+      * auth, **US gauges only**; default = Great Salt Lake at Saltair Boat
+      * Harbor (south arm), param 62614 = elevation in ft (NGVD 1929). The series
+      * is cached; WaterTimeSeriesMap consumes it via `level_relative_path` to
+      * overlay height on footprint. */
+    event facet FetchLakeLevel(
+        site_id: String = "10010000",
+        date_from: String,
+        date_to: String,
+        param: String = "62614",
+        use_mock: Boolean = false
+    ) => (
+        relative_path: String,
+        site_name: String,
+        unit: String,
+        point_count: Int,
+        min: Double,
+        max: Double
+    )
+        with RetryPolicy()
+        with Effect(kind = "external")
         with Cost(tier = "cheap")
 }
 
@@ -421,6 +448,52 @@ namespace s2.workflows {
             yield WaterTimeSeries(
                 status = "completed", html_path = map.html_path,
                 aoi = loc.aoi, year_count = map.year_count
+            )
+        }
+
+    /** Like WaterTimeSeries, but also fetches the lake's USGS gauge elevation
+      * (water *level*) for the period and overlays it on the chart — so you see
+      * surface *height* and water *footprint* on one timeline (they track, but
+      * non-linearly: a flat lake bares huge area for a small drop). US gauges
+      * only; default = the Great Salt Lake south-arm gauge. `date_from`/`date_to`
+      * bound the level series (span your `years`). */
+    workflow WaterLevelTimeSeries(
+        place: String = "Great Salt Lake, Utah",
+        buffer_km: Double = 20.0,
+        site_id: String = "10010000",
+        date_from: String = "2003-01-01",
+        date_to: String = "2024-12-31",
+        years: Json,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "ndwi",
+        water_threshold: Double = 0.0,
+        max_cloud: Double = 25.0,
+        collection: String = "landsat-c2-l2",
+        use_mock: Boolean = false
+    ) => (status: String, html_path: String, aoi: String, year_count: Int, level_points: Int)
+        with Author(email = "research@example.com")
+        with Teams(names = ["geo", "research"])
+        andThen {
+            loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            scanned = ScanYears(
+                aoi = loc.aoi, years = $.years, months_from = $.months_from,
+                months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
+                collection = $.collection, use_mock = $.use_mock
+            )
+            level = FetchLakeLevel(
+                site_id = $.site_id, date_from = $.date_from, date_to = $.date_to,
+                use_mock = $.use_mock
+            )
+            map = WaterTimeSeriesMap(
+                aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
+                title = "Lake water: level vs. extent",
+                level_relative_path = level.relative_path,
+                dependency_signal = scanned.count
+            )
+            yield WaterLevelTimeSeries(
+                status = "completed", html_path = map.html_path, aoi = loc.aoi,
+                year_count = map.year_count, level_points = level.point_count
             )
         }
 }
