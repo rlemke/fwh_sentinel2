@@ -277,6 +277,42 @@ def test_gauge_lookup_offline(tools_env):
     assert mk["site_id"] == level.GREAT_SALT_LAKE and mk["confident"] is True
 
 
+def test_reservoir_storage_mock(tools_env):
+    """Storage fetch returns acre-feet, caches, and overlays like level."""
+    from sentinel2.handlers.level.level_handlers import handle_fetch_reservoir_storage
+
+    from _s2_tools import level, raster, stac, timeseries
+
+    st = level.fetch_lake_storage("06857050", "2018-01-01", "2022-12-31", use_mock=True)
+    assert st["unit"] == "ac-ft" and st["point_count"] > 0 and st["max"] > st["min"]
+
+    aoi = "-97.0,39.0,-96.8,39.2"
+    for yr in ("2018", "2022"):
+        scenes = stac.search(aoi, f"{yr}-07-01", f"{yr}-09-30", use_mock=True)
+        for s in scenes:
+            raster.fetch_scene_index(s["scene_id"], aoi, index="mndwi", use_mock=True)
+        raster.composite(aoi, f"{yr}-07-01", f"{yr}-09-30",
+                         scene_ids=[s["scene_id"] for s in scenes], index="mndwi", use_mock=True)
+    bundle = timeseries.render_water_timeseries(aoi, index="mndwi", water_threshold=0.0, level=st)
+    html = Path(bundle["html_path"]).read_text()
+    assert "ac-ft" in html and "storage" in html  # axis/subtitle reflect storage
+
+    hr = handle_fetch_reservoir_storage({"site_id": "06857050", "date_from": "2018-01-01",
+                                         "date_to": "2019-12-31", "use_mock": True})
+    assert hr["unit"] == "ac-ft" and hr["relative_path"]
+
+
+@pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
+                    reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
+def test_real_reservoir_storage_live(tools_env):
+    """Live USGS storage (00054) for a reservoir that reports it."""
+    from _s2_tools import level
+
+    st = level.fetch_lake_storage("06857050", "2010-01-01", "2016-12-31", use_mock=False)
+    assert st["unit"] in ("ac-ft", "acre-ft") and st["point_count"] > 300
+    assert st["max"] > st["min"] > 0
+
+
 @pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
                     reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
 def test_real_lake_level_live(tools_env):

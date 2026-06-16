@@ -257,6 +257,7 @@ namespace s2.level {
         place: String = "",
         site_id: String = "",
         margin_deg: Double = 0.1,
+        params: String = "",
         use_mock: Boolean = false
     ) => (
         site_id: String,
@@ -268,6 +269,28 @@ namespace s2.level {
         confident: Boolean,
         candidate_count: Int,
         source: String
+    )
+        with RetryPolicy()
+        with Effect(kind = "external")
+        with Cost(tier = "cheap")
+
+    /** Daily reservoir **storage** (USGS param 00054, acre-feet) — the actual
+      * *quantity* of water, not just its height. Same cached series shape as
+      * FetchLakeLevel (unit "ac-ft"), so WaterTimeSeriesMap overlays it the same
+      * way. Reported by many USGS-gauged reservoirs (Army-Corps / state lakes);
+      * Reclamation-managed ones (Powell, Mead) don't report it. */
+    event facet FetchReservoirStorage(
+        site_id: String,
+        date_from: String,
+        date_to: String,
+        use_mock: Boolean = false
+    ) => (
+        relative_path: String,
+        site_name: String,
+        unit: String,
+        point_count: Int,
+        min: Double,
+        max: Double
     )
         with RetryPolicy()
         with Effect(kind = "external")
@@ -540,6 +563,63 @@ namespace s2.workflows {
             yield WaterLevelTimeSeries(
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
                 year_count = map.year_count, level_points = level.point_count,
+                gauge = gauge.site_name, gauge_confident = gauge.confident
+            )
+        }
+
+    /** Like WaterLevelTimeSeries, but overlays reservoir **storage** (USGS param
+      * 00054, acre-feet) instead of level — the actual *quantity* of water over
+      * time, against the satellite footprint. Discovers a storage-reporting
+      * (00054) LK gauge by name. Works for USGS-gauged reservoirs (Army-Corps /
+      * state lakes); Reclamation reservoirs (Powell, Mead) don't report 00054 —
+      * pass a `site_id` or use WaterLevelTimeSeries (elevation) for those. */
+    workflow WaterStorageTimeSeries(
+        place: String = "Milford Lake, Kansas",
+        buffer_km: Double = 0.0,
+        site_id: String = "",
+        date_from: String = "2003-01-01",
+        date_to: String = "2024-12-31",
+        years: Json,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "mndwi",
+        water_threshold: Double = 0.0,
+        max_cloud: Double = 25.0,
+        collection: String = "landsat-c2-l2",
+        exclude_platforms: String = "LE07",
+        use_mock: Boolean = false
+    ) => (
+        status: String, html_path: String, aoi: String, year_count: Int,
+        storage_points: Int, gauge: String, gauge_confident: Boolean
+    )
+        with Author(email = "research@example.com")
+        with Teams(names = ["geo", "research"])
+        andThen {
+            loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            gauge = ResolveLakeGauge(
+                aoi = loc.aoi, place = $.place, site_id = $.site_id,
+                params = "00054", use_mock = $.use_mock
+            )
+            scanned = ScanYears(
+                aoi = loc.aoi, years = $.years, months_from = $.months_from,
+                months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
+                collection = $.collection, exclude_platforms = $.exclude_platforms,
+                use_mock = $.use_mock
+            )
+            storage = FetchReservoirStorage(
+                site_id = gauge.site_id, date_from = $.date_from, date_to = $.date_to,
+                use_mock = $.use_mock
+            )
+            map = WaterTimeSeriesMap(
+                aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
+                title = "Reservoir water: storage vs. extent",
+                months_from = $.months_from, months_to = $.months_to,
+                level_relative_path = storage.relative_path,
+                dependency_signal = scanned.count
+            )
+            yield WaterStorageTimeSeries(
+                status = "completed", html_path = map.html_path, aoi = loc.aoi,
+                year_count = map.year_count, storage_points = storage.point_count,
                 gauge = gauge.site_name, gauge_confident = gauge.confident
             )
         }

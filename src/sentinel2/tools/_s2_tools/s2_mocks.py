@@ -82,3 +82,27 @@ def mock_lake_level(site_id: str, date_from: str, date_to: str) -> dict:
     return {"site_id": site_id, "site_name": f"MOCK LAKE {site_id}", "unit": "ft",
             "series": series, "point_count": len(series),
             "min": round(min(vals), 2), "max": round(max(vals), 2)}
+
+
+def mock_reservoir_storage(site_id: str, date_from: str, date_to: str) -> dict:
+    """Deterministic weekly storage series (acre-feet) with a mid-window drought
+    trough, in a plausible mid-size-reservoir range (~0.3–1.1 M ac-ft). Offline."""
+    start = date.fromisoformat(date_from)
+    end = date.fromisoformat(date_to)
+    span = max((end - start).days, 1)
+    series = []
+    d = start
+    while d <= end:
+        t = (d - start).days / span
+        trough = 0.8
+        if t <= trough:
+            stor = 1_080_000 - 800_000 * (t / trough)   # full -> drought low
+        else:
+            stor = 280_000 + 500_000 * ((t - trough) / (1 - trough))  # refill
+        jitter = (_seed(site_id, d.isoformat()) % 2001) - 1000  # ±1000 ac-ft
+        series.append({"date": d.isoformat(), "value": round(stor + jitter)})
+        d += timedelta(days=7)
+    vals = [p["value"] for p in series]
+    return {"site_id": site_id, "site_name": f"MOCK RES {site_id}", "unit": "ac-ft",
+            "series": series, "point_count": len(series),
+            "min": min(vals), "max": max(vals)}

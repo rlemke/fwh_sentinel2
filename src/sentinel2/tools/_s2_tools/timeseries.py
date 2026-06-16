@@ -216,17 +216,18 @@ function buildChart(){
   var ctx=document.getElementById('chart');
   if(cfg.level){
     var L=cfg.level;window._extentDs=1;
-    document.getElementById('sub').textContent='water extent ('+cfg.index+', km²) vs. lake level ('+L.unit+')'+(L.siteName?' — '+L.siteName:'');
+    var oLbl=(L.unit.indexOf('ac')>=0)?'storage':'level';
+    document.getElementById('sub').textContent='water extent ('+cfg.index+', km²) vs. lake '+oLbl+' ('+L.unit+')'+(L.siteName?' — '+L.siteName:'');
     window._chart=new Chart(ctx,{type:'line',
       data:{datasets:[
-        {label:'level ('+L.unit+')',yAxisID:'yL',data:L.line.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#b2182b',borderWidth:1.5,pointRadius:0,tension:0},
+        {label:oLbl+' ('+L.unit+')',yAxisID:'yL',data:L.line.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#b2182b',borderWidth:1.5,pointRadius:0,tension:0},
         {label:'water km²',yAxisID:'yR',data:L.extentPoints.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#2166ac',backgroundColor:'rgba(33,102,172,.15)',showLine:true,fill:false,tension:.25,pointRadius:4}
       ]},
       options:{interaction:{mode:'nearest'},
         plugins:{legend:{display:true,labels:{boxWidth:10,font:{size:11}}}},
         onClick:function(e,el){for(var k=0;k<el.length;k++){if(el[k].datasetIndex===1){show(el[k].index);break;}}},
         scales:{x:{type:'linear',title:{display:true,text:'year'},ticks:{stepSize:2,callback:function(v){return v.toFixed(0);}}},
-          yL:{position:'left',title:{display:true,text:'level ('+L.unit+')'}},
+          yL:{position:'left',title:{display:true,text:oLbl+' ('+L.unit+')'}},
           yR:{position:'right',title:{display:true,text:'water km²'},grid:{drawOnChartArea:false}}}}});
   }else{
     window._extentDs=0;

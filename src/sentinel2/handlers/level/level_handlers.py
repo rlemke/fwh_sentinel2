@@ -18,11 +18,15 @@ NAMESPACE = "s2.level"
 
 
 def handle_resolve_lake_gauge(params: dict[str, Any]) -> dict[str, Any]:
+    # Comma-separated param codes to search; "" = the default elevation set.
+    pcsv = params.get("params", "")
+    pset = tuple(p.strip() for p in pcsv.split(",") if p.strip()) or level.ELEV_PARAMS
     res = level.find_lake_gauge(
         aoi=params["aoi"],
         place=params.get("place", ""),
         site_id=params.get("site_id", ""),
         margin_deg=float(params.get("margin_deg", 0.1)),
+        params=pset,
         use_mock=bool(params.get("use_mock", False)),
     )
     msg = ("ResolveLakeGauge aoi=%s place=%r -> %s %r param=%s (%.1f km, %d candidates)"
@@ -52,9 +56,25 @@ def handle_fetch_lake_level(params: dict[str, Any]) -> dict[str, Any]:
             ("relative_path", "site_name", "unit", "point_count", "min", "max")}
 
 
+def handle_fetch_reservoir_storage(params: dict[str, Any]) -> dict[str, Any]:
+    res = level.fetch_lake_storage(
+        site_id=params["site_id"],
+        date_from=params["date_from"],
+        date_to=params["date_to"],
+        force=bool(params.get("force", False)),
+        use_mock=bool(params.get("use_mock", False)),
+    )
+    logger.info("FetchReservoirStorage site=%s %s..%s -> %d points (%s..%s %s)",
+                res["site_id"], params["date_from"], params["date_to"],
+                res["point_count"], res["min"], res["max"], res["unit"])
+    return {k: res[k] for k in
+            ("relative_path", "site_name", "unit", "point_count", "min", "max")}
+
+
 _DISPATCH: dict[str, Any] = {
     f"{NAMESPACE}.ResolveLakeGauge": handle_resolve_lake_gauge,
     f"{NAMESPACE}.FetchLakeLevel": handle_fetch_lake_level,
+    f"{NAMESPACE}.FetchReservoirStorage": handle_fetch_reservoir_storage,
 }
 
 

@@ -40,6 +40,10 @@ ELEV_PARAM = "62614"
 # level series for one site; the true-elevation datums win when a lake has both.
 ELEV_PARAMS = ("62614", "62615", "00062", "00065")
 
+# Reservoir storage (the actual water *quantity*), acre-feet. Reported by many
+# USGS-gauged reservoirs; not by Reclamation-managed ones (Powell, Mead).
+STORAGE_PARAM = "00054"
+
 # Generic tokens dropped before name-matching a place against a station name, so
 # "Lake Powell" matches "LAKE POWELL AT GLEN CANYON DAM" on the rare token.
 _NAME_STOP = {
@@ -91,13 +95,13 @@ def _parse_rdb(text: str) -> list[dict[str, str]]:
     return out
 
 
-def _discover_gauges(west, south, east, north) -> list[dict[str, Any]]:
-    """USGS lake/reservoir (siteType=LK) elevation gauges with daily values in the
-    bbox, tagged with the (priority-order) elevation param they report."""
+def _discover_gauges(west, south, east, north, params=ELEV_PARAMS) -> list[dict[str, Any]]:
+    """USGS lake/reservoir (siteType=LK) gauges with daily values for any of
+    ``params`` in the bbox, tagged with the (priority-order) param they report."""
     import requests
 
     seen: dict[str, dict[str, Any]] = {}
-    for param in ELEV_PARAMS:
+    for param in params:
         try:
             resp = requests.get(
                 _NWIS_SITE,
@@ -125,34 +129,36 @@ def _discover_gauges(west, south, east, north) -> list[dict[str, Any]]:
 
 def find_lake_gauge(
     aoi: str, *, place: str = "", site_id: str = "", margin_deg: float = 0.1,
-    use_mock: bool = False,
+    params=ELEV_PARAMS, use_mock: bool = False,
 ) -> dict[str, Any]:
-    """Resolve the best USGS lake-elevation gauge for an AOI. An explicit
-    ``site_id`` is returned as-is (override). Otherwise discover LK gauges in the
-    margin-expanded AOI bbox and pick the one whose station name best matches
-    ``place`` (then nearest to the AOI centroid). Raises if none are found —
-    many lakes (e.g. Bureau-of-Reclamation reservoirs like Lake Mead) have no
-    USGS elevation gauge. Returns {site_id, param, site_name, lat, lon,
-    distance_km, confident, candidate_count, source}."""
+    """Resolve the best USGS lake gauge for an AOI. ``params`` is the set of daily
+    parameter codes to search (default = water-level; pass ``("00054",)`` for
+    reservoir storage). An explicit ``site_id`` is returned as-is. Otherwise
+    discover LK gauges in the margin-expanded AOI bbox and pick the best
+    name-match (then nearest). Raises if none are found — many lakes (e.g.
+    Bureau-of-Reclamation reservoirs like Lake Mead) aren't USGS-gauged. Returns
+    {site_id, param, site_name, lat, lon, distance_km, confident,
+    candidate_count, source}."""
     if site_id:
-        return {"site_id": site_id, "param": ELEV_PARAM, "site_name": "",
+        return {"site_id": site_id, "param": params[0], "site_name": "",
                 "lat": 0.0, "lon": 0.0, "distance_km": 0.0, "confident": True,
                 "candidate_count": 1, "source": "explicit"}
     if use_mock:
-        return {"site_id": GREAT_SALT_LAKE, "param": ELEV_PARAM,
+        return {"site_id": GREAT_SALT_LAKE, "param": params[0],
                 "site_name": f"MOCK LAKE {GREAT_SALT_LAKE}", "lat": 40.7313,
                 "lon": -112.2136, "distance_km": 0.0, "confident": True,
                 "candidate_count": 1, "source": "mock"}
 
     w, s, e, n = (float(x) for x in aoi.split(","))
     cx, cy = (w + e) / 2, (s + n) / 2
-    cands = _discover_gauges(w - margin_deg, s - margin_deg, e + margin_deg, n + margin_deg)
+    cands = _discover_gauges(w - margin_deg, s - margin_deg, e + margin_deg,
+                             n + margin_deg, params=params)
     if not cands:
         raise ValueError(
-            f"no USGS lake-elevation gauge (siteType=LK, param "
-            f"{'/'.join(ELEV_PARAMS)}) within {margin_deg}° of aoi={aoi}. This lake "
-            f"may not be USGS-gauged (e.g. Reclamation reservoirs like Lake Mead) — "
-            f"pass an explicit site_id, or omit the level overlay.")
+            f"no USGS lake gauge (siteType=LK, param {'/'.join(params)}) within "
+            f"{margin_deg}° of aoi={aoi}. This lake may not be USGS-gauged for it "
+            f"(e.g. Reclamation reservoirs like Lake Mead) — pass an explicit "
+            f"site_id, or omit the overlay.")
 
     place_tokens = _tokens(place)
     for c in cands:
@@ -172,38 +178,59 @@ def fetch_lake_level(
     site_id: str, date_from: str, date_to: str, *,
     param: str = ELEV_PARAM, force: bool = False, use_mock: bool = False,
 ) -> dict[str, Any]:
-    """Daily lake elevation for a USGS site over [date_from, date_to]. Caches the
-    series; returns {site_id, site_name, unit, series:[{date,value}], point_count,
-    min, max, relative_path, was_cached}."""
+    """Daily lake water level (elevation/gage height) for a USGS site. Tries the
+    given param then the other elevation datums (a discovered site may use a
+    different one). Returns {site_id, site_name, unit, series, point_count, min,
+    max, relative_path, was_cached}."""
+    params_to_try = [param] + [p for p in ELEV_PARAMS if p != param]
+    return _fetch_cached(site_id, date_from, date_to, param, params_to_try,
+                         s2_mocks.mock_lake_level, force, use_mock)
+
+
+def fetch_lake_storage(
+    site_id: str, date_from: str, date_to: str, *,
+    force: bool = False, use_mock: bool = False,
+) -> dict[str, Any]:
+    """Daily reservoir **storage** (USGS param 00054, acre-feet) for a site — the
+    actual *quantity* of water, not just its height. Same doc shape as
+    ``fetch_lake_level`` (unit "ac-ft"). Many USGS-gauged reservoirs report it
+    (Army-Corps / state lakes); Reclamation reservoirs (Powell, Mead) do not."""
+    return _fetch_cached(site_id, date_from, date_to, STORAGE_PARAM, [STORAGE_PARAM],
+                         s2_mocks.mock_reservoir_storage, force, use_mock)
+
+
+def _fetch_cached(site_id, date_from, date_to, param, params_to_try, mock_fn,
+                  force, use_mock) -> dict[str, Any]:
     rel = _rel(site_id, date_from, date_to, param)
     if not force and sidecar.exists(LAKE_LEVEL, rel):
         doc = json.loads(storage.read_text(sidecar.cache_path(LAKE_LEVEL, rel)))
         return {**doc, "relative_path": rel, "was_cached": True}
-
     if use_mock:
-        doc = s2_mocks.mock_lake_level(site_id, date_from, date_to)
+        doc = mock_fn(site_id, date_from, date_to)
         source = f"mock://{site_id}/{param}"
     else:
-        doc = _fetch_real(site_id, date_from, date_to, param)
+        doc = _fetch_real(site_id, date_from, date_to, params_to_try)
         source = f"{_NWIS}?sites={site_id}&parameterCd={param}"
-
     sidecar.write(LAKE_LEVEL, rel, json.dumps(doc).encode("utf-8"),
-                  source=source, tool="fetch_lake_level")
+                  source=source, tool="fetch_lake_series")
     return {**doc, "relative_path": rel, "was_cached": False}
 
 
 def load_series(relative_path: str) -> dict[str, Any]:
-    """Load a cached level series by its relative_path (used by the renderer)."""
+    """Load a cached series by its relative_path (used by the renderer)."""
     return json.loads(storage.read_text(sidecar.cache_path(LAKE_LEVEL, relative_path)))
 
 
-def _fetch_real(site_id, date_from, date_to, param) -> dict[str, Any]:
+def _series_points(s) -> list[dict[str, Any]]:
+    return [{"date": v["dateTime"][:10], "value": float(v["value"])}
+            for v in s.get("values", [{}])[0].get("value", [])
+            if v.get("value") not in ("", None, "-999999")]
+
+
+def _fetch_real(site_id, date_from, date_to, params_to_try) -> dict[str, Any]:
     import requests
 
-    # Try the requested param first, then the other elevation params — an
-    # auto-discovered site may report a different datum than the default.
-    params_to_try = [param] + [p for p in ELEV_PARAMS if p != param]
-    ts: list = []
+    best = None  # (timeSeries, points) with the most non-empty values
     for pc in params_to_try:
         resp = requests.get(
             _NWIS,
@@ -212,22 +239,20 @@ def _fetch_real(site_id, date_from, date_to, param) -> dict[str, Any]:
             headers={"User-Agent": _USER_AGENT}, timeout=60,
         )
         resp.raise_for_status()
-        ts = resp.json().get("value", {}).get("timeSeries", [])
-        if ts and ts[0].get("values", [{}])[0].get("value"):
-            break
-    if not ts:
-        raise ValueError(f"USGS NWIS returned no elevation series for site {site_id} "
+        # A site can report a param under several statistic codes (mean, max, …);
+        # pick the timeSeries with the most actual values, not just the first.
+        for s in resp.json().get("value", {}).get("timeSeries", []):
+            pts = _series_points(s)
+            if pts and (best is None or len(pts) > len(best[1])):
+                best = (s, pts)
+        if best:
+            break  # this param (highest priority) yielded data
+    if best is None:
+        raise ValueError(f"USGS NWIS returned no series for site {site_id} "
                          f"(params {'/'.join(params_to_try)}) over {date_from}..{date_to}")
-    s = ts[0]
-    name = s["sourceInfo"]["siteName"]
-    unit = s["variable"]["unit"]["unitCode"]  # e.g. "ft"
-    series = [
-        {"date": v["dateTime"][:10], "value": float(v["value"])}
-        for v in s["values"][0]["value"]
-        if v.get("value") not in ("", None, "-999999")
-    ]
+    s, series = best
     vals = [p["value"] for p in series]
-    return {"site_id": site_id, "site_name": name, "unit": unit, "series": series,
+    return {"site_id": site_id, "site_name": s["sourceInfo"]["siteName"],
+            "unit": s["variable"]["unit"]["unitCode"], "series": series,
             "point_count": len(series),
-            "min": round(min(vals), 2) if vals else None,
-            "max": round(max(vals), 2) if vals else None}
+            "min": round(min(vals), 2), "max": round(max(vals), 2)}

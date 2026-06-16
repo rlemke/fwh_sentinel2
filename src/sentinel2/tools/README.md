@@ -5,8 +5,9 @@ terminal and the runtime share one cache (`$AFL_CACHE_ROOT/s2/`) and one code pa
 
 ```
 search_scenes.py   STAC search → {count, scene_ids}              [shipped]
-find_lake_gauge.py AOI/place → best USGS lake-level gauge         [shipped]
+find_lake_gauge.py AOI/place → best USGS lake gauge               [shipped]
 lake_level.py      USGS site → cached daily level series          [shipped]
+reservoir_storage USGS site → cached daily storage (acre-feet)    [shipped]
 fetch_scene_index  one scene → cached AOI-clipped index raster   [TODO CLI; handler + lib done]
 composite          epoch median composite over cached scenes     [TODO CLI; handler + lib done]
 detect_change      baseline vs recent → change raster + stats     [TODO CLI; handler + lib done]
