@@ -60,6 +60,7 @@ namespace s2.source {
         max_cloud: Double = 20.0,
         collection: String = "sentinel-2-l2a",
         stac_url: String = "",
+        exclude_platforms: String = "",
         use_mock: Boolean = false
     ) => (count: Int, scene_ids: Json)
         with RetryPolicy()
@@ -403,6 +404,7 @@ namespace s2.workflows {
         index: String = "ndwi",
         max_cloud: Double = 15.0,
         collection: String = "sentinel-2-l2a",
+        exclude_platforms: String = "",
         use_mock: Boolean = false
     ) => (relative_path: String, scene_count: Int)
         andThen {
@@ -410,7 +412,8 @@ namespace s2.workflows {
                 aoi = $.aoi,
                 date_from = $.year ++ "-" ++ $.months_from,
                 date_to = $.year ++ "-" ++ $.months_to,
-                max_cloud = $.max_cloud, collection = $.collection, use_mock = $.use_mock
+                max_cloud = $.max_cloud, collection = $.collection,
+                exclude_platforms = $.exclude_platforms, use_mock = $.use_mock
             )
             scan = ScanScenes(
                 scene_ids = search.scene_ids, aoi = $.aoi, index = $.index, use_mock = $.use_mock
@@ -434,13 +437,14 @@ namespace s2.workflows {
         index: String = "ndwi",
         max_cloud: Double = 15.0,
         collection: String = "sentinel-2-l2a",
+        exclude_platforms: String = "",
         use_mock: Boolean = false
     ) => (count: Long)
         andThen foreach yr in $.years {
             wy = WaterYear(
                 aoi = $.aoi, year = $.yr, months_from = $.months_from, months_to = $.months_to,
                 index = $.index, max_cloud = $.max_cloud, collection = $.collection,
-                use_mock = $.use_mock
+                exclude_platforms = $.exclude_platforms, use_mock = $.use_mock
             )
             yield ScanYears(count = 1)
         }
@@ -460,6 +464,7 @@ namespace s2.workflows {
         water_threshold: Double = 0.1,
         max_cloud: Double = 15.0,
         collection: String = "sentinel-2-l2a",
+        exclude_platforms: String = "",
         use_mock: Boolean = false
     ) => (status: String, html_path: String, aoi: String, year_count: Int)
         with Author(email = "research@example.com")
@@ -469,7 +474,8 @@ namespace s2.workflows {
             scanned = ScanYears(
                 aoi = loc.aoi, years = $.years, months_from = $.months_from,
                 months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
-                collection = $.collection, use_mock = $.use_mock
+                collection = $.collection, exclude_platforms = $.exclude_platforms,
+                use_mock = $.use_mock
             )
             map = WaterTimeSeriesMap(
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
@@ -501,6 +507,7 @@ namespace s2.workflows {
         water_threshold: Double = 0.0,
         max_cloud: Double = 25.0,
         collection: String = "landsat-c2-l2",
+        exclude_platforms: String = "",
         use_mock: Boolean = false
     ) => (
         status: String, html_path: String, aoi: String, year_count: Int,
@@ -516,7 +523,8 @@ namespace s2.workflows {
             scanned = ScanYears(
                 aoi = loc.aoi, years = $.years, months_from = $.months_from,
                 months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
-                collection = $.collection, use_mock = $.use_mock
+                collection = $.collection, exclude_platforms = $.exclude_platforms,
+                use_mock = $.use_mock
             )
             level = FetchLakeLevel(
                 site_id = gauge.site_id, param = gauge.param,

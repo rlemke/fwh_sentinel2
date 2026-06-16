@@ -72,16 +72,28 @@ def search(
     max_cloud: float = 20.0,
     collection: str = "sentinel-2-l2a",
     stac_url: str = "",
+    exclude_platforms: str = "",
     use_mock: bool = False,
 ) -> list[dict[str, Any]]:
     """Return scene dicts {scene_id, datetime, cloud_pct}. ``stac_url`` is an
-    optional override; by default the collection's provider endpoint is used."""
+    optional override; by default the collection's provider endpoint is used.
+    ``exclude_platforms`` is a comma-separated list of scene-id prefixes to drop
+    (e.g. ``"LE07"`` to skip Landsat-7, whose SLC-off gaps stripe the composite)."""
     parse_bbox(aoi)
     if use_mock:
         ids = s2_mocks.mock_scene_ids(aoi, date_from, date_to, max_cloud)
-        return [{"scene_id": sid, "datetime": f"{date_from}T10:00:00Z", "cloud_pct": 5.0}
-                for sid in ids]
-    return _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url)
+        scenes = [{"scene_id": sid, "datetime": f"{date_from}T10:00:00Z", "cloud_pct": 5.0}
+                  for sid in ids]
+    else:
+        scenes = _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url)
+    return _drop_platforms(scenes, exclude_platforms)
+
+
+def _drop_platforms(scenes: list[dict[str, Any]], exclude_platforms: str) -> list[dict[str, Any]]:
+    prefixes = tuple(p.strip() for p in exclude_platforms.split(",") if p.strip())
+    if not prefixes:
+        return scenes
+    return [s for s in scenes if not str(s["scene_id"]).startswith(prefixes)]
 
 
 def _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url):

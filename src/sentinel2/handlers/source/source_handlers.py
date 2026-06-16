@@ -24,6 +24,7 @@ def handle_search_scenes(params: dict[str, Any]) -> dict[str, Any]:
         max_cloud=float(params.get("max_cloud", 20.0)),
         collection=params.get("collection", "sentinel-2-l2a"),
         stac_url=params.get("stac_url", ""),
+        exclude_platforms=params.get("exclude_platforms", ""),
         use_mock=bool(params.get("use_mock", False)),
     )
     scene_ids = [s["scene_id"] for s in scenes]

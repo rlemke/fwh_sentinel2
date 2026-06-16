@@ -362,6 +362,18 @@ def test_grid_size_exact_and_consistent(tools_env):
     assert raster._grid_size([-1, -1, 1, 1], 512) == raster._grid_size([-1, -1, 1, 1], 512)
 
 
+def test_exclude_platforms(tools_env):
+    """exclude_platforms drops scene ids by prefix (e.g. Landsat-7 'LE07')."""
+    from _s2_tools import stac
+
+    scenes = [{"scene_id": "LC08_x"}, {"scene_id": "LE07_y"}, {"scene_id": "LT05_z"}]
+    kept = {s["scene_id"] for s in stac._drop_platforms(scenes, "LE07")}
+    assert kept == {"LC08_x", "LT05_z"}
+    # multiple prefixes + empty = no-op
+    assert len(stac._drop_platforms(scenes, "LE07, LT05")) == 1
+    assert len(stac._drop_platforms(scenes, "")) == 3
+
+
 def test_mndwi_index(tools_env):
     """MNDWI (green vs SWIR) is a known index and runs through the mock chain —
     the turbid-water index for lakes like Okeechobee."""
