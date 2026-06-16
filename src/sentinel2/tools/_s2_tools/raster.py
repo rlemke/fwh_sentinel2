@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import os
+import warnings
 from typing import Any
 
 import numpy as np
@@ -142,14 +143,20 @@ def _fetch_real(scene_id, aoi, index, collection, stac_url):
         raw = img.data[0].astype("float32")
         # raw DN -> surface reflectance, so S2 and Landsat are comparable.
         sr = raw * scale + offset
-        sr[raw == 0] = 0.0  # fill value
+        # Nodata -> NaN (NOT 0): a scene covers only part of a large AOI, and a
+        # 0 here would drag the composite median toward 0. NaN is dropped by the
+        # nanmedian in composite(), so uncovered pixels just don't vote.
+        sr[raw == 0] = np.nan
         return sr
 
     num = _read(num_band)
     den = _read(den_band)
     denom = num + den
     with np.errstate(divide="ignore", invalid="ignore"):
-        idx = np.where(denom != 0, (num - den) / denom, 0.0).astype("float32")
+        idx = np.where(denom != 0, (num - den) / denom, np.nan)
+    # A normalized-difference index is bounded [-1, 1]; clip guards tiny-denom
+    # blow-ups (e.g. Landsat-8 SR where green ≈ -nir gave values like -4000).
+    idx = np.clip(idx, -1.0, 1.0).astype("float32")
     return idx, f"{prov['collection']}::{scene_id}::{num_band}-{den_band}"
 
 
@@ -177,7 +184,13 @@ def composite(
             f"no cached scene-index rasters for aoi={ak} index={index}; run ScanScenes first"
         )
     stack = np.stack([_load(SCENE_INDEX, r)[0] for r in rels], axis=0)
-    arr = (np.median(stack, axis=0) if reducer == "median" else np.mean(stack, axis=0)).astype("float32")
+    # nan-aware reduce: nodata (NaN) pixels don't vote, so partial scene coverage
+    # over a large AOI no longer collapses the composite to 0. Pixels no scene
+    # covers stay NaN (→ not water in the mask). All-NaN slices are expected.
+    with np.errstate(invalid="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # all-NaN slice
+        arr = (np.nanmedian(stack, axis=0) if reducer == "median"
+               else np.nanmean(stack, axis=0)).astype("float32")
     _arr0, bounds, crs = _load(SCENE_INDEX, rels[0])
     rel = f"{ak}/{index}/{date_from}_{date_to}.npz"
     meta = _save(COMPOSITE, rel, arr, bounds=bounds, crs=crs,

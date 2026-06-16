@@ -362,6 +362,25 @@ def test_grid_size_exact_and_consistent(tools_env):
     assert raster._grid_size([-1, -1, 1, 1], 512) == raster._grid_size([-1, -1, 1, 1], 512)
 
 
+def test_composite_ignores_nodata_nan(tools_env):
+    """Composite uses a nan-aware median, so a scene's nodata (NaN) pixels don't
+    vote — partial scene coverage over a large AOI must not zero the composite."""
+    import numpy as np
+
+    from _s2_tools import raster
+
+    aoi = "-120,38,-119,39"
+    ak, idx = raster.aoi_key(aoi), "ndwi"
+    a = np.full((4, 4), 0.5, dtype="float32"); a[0, 0] = np.nan  # scene A: nodata at (0,0)
+    b = np.full((4, 4), 0.5, dtype="float32")                    # scene B: covers (0,0)
+    for sid, arr in (("SA", a), ("SB", b)):
+        raster._save(raster.SCENE_INDEX, f"{ak}/{idx}/{sid}.npz", arr,
+                     bounds=(-120, 38, -119, 39), crs="EPSG:4326", source="t", tool="t")
+    res = raster.composite(aoi, "2020-07-01", "2020-09-30", scene_ids=["SA", "SB"], index=idx)
+    out, _, _ = raster._load(raster.COMPOSITE, res["relative_path"])
+    assert abs(float(out[0, 0]) - 0.5) < 1e-6  # NaN in A ignored -> B's 0.5, not 0
+
+
 def test_exclude_platforms(tools_env):
     """exclude_platforms drops scene ids by prefix (e.g. Landsat-7 'LE07')."""
     from _s2_tools import stac
