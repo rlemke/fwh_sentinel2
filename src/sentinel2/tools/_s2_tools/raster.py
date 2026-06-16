@@ -45,6 +45,17 @@ _BANDS = {
 MAX_SIZE = int(os.environ.get("AFL_S2_MAX_SIZE", "512"))
 
 
+def _grid_size(bbox, max_size: int) -> tuple[int, int]:
+    """Exact (width, height) for an AOI: longest edge = max_size, the other
+    scaled by the bbox aspect. Deterministic per AOI so every scene read yields
+    the same shape (the composite stacks them)."""
+    w, s, e, n = (float(b) for b in bbox)
+    dw, dh = abs(e - w), abs(n - s)
+    if dw >= dh:
+        return max_size, max(1, round(max_size * dh / dw))
+    return max(1, round(max_size * dw / dh)), max_size
+
+
 def aoi_key(aoi: str) -> str:
     """Filesystem-safe key for an AOI bbox string."""
     return aoi.replace(",", "_").replace("-", "m").replace(".", "p")
@@ -116,12 +127,18 @@ def _fetch_real(scene_id, aoi, index, collection, stac_url):
     bbox = list(stac.parse_bbox(aoi))
     scale, offset = prov["scale"], prov["offset"]
     gdal_env = prov.get("gdal_env", {})
+    # Force an EXACT output grid (not max_size, which rounds per-scene and yields
+    # off-by-one shapes that break the composite's np.stack). Longest edge =
+    # MAX_SIZE; the other follows the AOI aspect. Identical for every scene of
+    # this AOI, so the per-scene → composite chain stacks cleanly.
+    out_w, out_h = _grid_size(bbox, MAX_SIZE)
 
     def _read(band: str) -> np.ndarray:
         # Per-provider GDAL config: anonymous AWS for Sentinel-2, plain /vsicurl
         # for the signed Azure (Landsat) URLs.
         with rasterio.Env(**gdal_env), Reader(assets[band]) as r:
-            img = r.part(bbox, bounds_crs="epsg:4326", dst_crs="epsg:4326", max_size=MAX_SIZE)
+            img = r.part(bbox, bounds_crs="epsg:4326", dst_crs="epsg:4326",
+                         width=out_w, height=out_h)
         raw = img.data[0].astype("float32")
         # raw DN -> surface reflectance, so S2 and Landsat are comparable.
         sr = raw * scale + offset

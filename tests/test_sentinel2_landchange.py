@@ -349,6 +349,19 @@ def test_unknown_index_rejected(tools_env):
         raster.fetch_scene_index("S2_X", "-1,-1,1,1", index="bogus", use_mock=True)
 
 
+def test_grid_size_exact_and_consistent(tools_env):
+    """Every scene of an AOI must read to the same exact grid (longest edge =
+    max_size), so the composite's np.stack never sees mismatched shapes."""
+    from _s2_tools import raster
+
+    assert raster._grid_size([-2.0, 0.0, 0.0, 1.0], 1000) == (1000, 500)  # wide: width pinned
+    assert raster._grid_size([0.0, 0.0, 1.0, 2.0], 1000) == (500, 1000)   # tall: height pinned
+    # the Okeechobee fitted bbox (nearly square, slightly taller)
+    assert raster._grid_size([-81.106, 26.681, -80.611, 27.207], 1024) == (964, 1024)
+    # deterministic: same bbox always same grid
+    assert raster._grid_size([-1, -1, 1, 1], 512) == raster._grid_size([-1, -1, 1, 1], 512)
+
+
 def test_mndwi_index(tools_env):
     """MNDWI (green vs SWIR) is a known index and runs through the mock chain —
     the turbid-water index for lakes like Okeechobee."""
