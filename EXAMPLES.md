@@ -72,11 +72,34 @@ so here the *gauge* is the meaningful signal and extent correctly doesn't move.
 **Ceiling:** summer cyanobacteria blooms read as not-water, so extent under-counts
 (~28% of ~176 km²).
 
-## What the three lakes teach
+### 4. Lake Powell, Utah/Arizona — canyon reservoir, the drought recession
 
-| Lake | Shore | Extent↔level | Optical ceiling |
-|------|-------|--------------|-----------------|
+```bash
+# AFL_S2_MAX_SIZE=1024 on the runner (large AOI). ~141 reads — a long run.
+scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
+  --inputs '{"place":"Lake Powell, Utah","buffer_km":0,"years":["2004","2009","2014","2019","2022","2024"],
+             "collection":"landsat-c2-l2","index":"ndwi","water_threshold":0.0,"max_cloud":20,
+             "exclude_platforms":"LE07"}' --task-list s2
+```
+
+Gauge `09379900` (Glen Canyon Dam, ft NAVD88). A deep **branching canyon
+reservoir** — clear water, desert-clear summers, so plain `ndwi` works. Its fitted
+bbox is **~113×119 km** (the whole canyon system across several Landsat path/rows)
+— the case that forced the **nan-aware composite** (uncovered pixels must not vote
+0) and the **index clip** to `[-1,1]`. **Finding:** like the Great Salt Lake but a
+reservoir — extent tracks level. The Colorado-River megadrought shows clearly:
+open water fell from a **2009 peak (353 km²) to a 2022 low (181 km², −49%)** and
+partially recovered by 2024 (252 km²); the side-canyons visibly shrink to threads
+in 2022. Where the gauge has data the two move together (3618 ft→322 km²,
+3534 ft→181 km², 3582 ft→252 km²). **Caveat:** the USGS `62614` record for this
+site is sparse before ~2015, so the level overlay is strongest in recent years.
+
+## What the four lakes teach
+
+| Lake | Shore / form | Extent↔level | Optical ceiling |
+|------|--------------|--------------|-----------------|
 | Great Salt Lake | flat pan | strongly coupled | none — clear open water |
+| Lake Powell | branching canyon reservoir | coupled — recession visible | none; level record sparse pre-2015 |
 | Okeechobee | marsh-fringed | loosely (open-water core) | emergent marsh (~⅓ uncounted) |
 | Clear Lake | steep banks | decoupled (footprint flat) | algal blooms under-count |
 
