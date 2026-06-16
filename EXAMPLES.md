@@ -13,17 +13,23 @@ with `scripts/ffl-run` against a runner started with
 | `s2.workflows.AnalyzeAOI` | Baseline vs recent change for a raw AOI (NDVI/NDWI/NDBI; difference/classify/water) → MapLibre map. |
 | `s2.workflows.AnalyzeRegion` | Geocode a place → `AnalyzeAOI`. |
 | `s2.workflows.WaterTimeSeries` | Per-year water **extent** composites (fan-out) → year-tab viewer + area chart. |
-| `s2.workflows.WaterLevelTimeSeries` | `WaterTimeSeries` **+** auto-discovered USGS gauge **level**, overlaid on a dual-axis chart. |
+| `s2.workflows.WaterLevelTimeSeries` | `WaterTimeSeries` **+** auto-discovered USGS gauge **level** (height, ft), overlaid on a dual-axis chart. |
+| `s2.workflows.WaterStorageTimeSeries` | `WaterTimeSeries` **+** USGS reservoir **storage** (quantity, acre-feet), overlaid — the "how much water" axis. |
 
-Tools (`tools/`) expose the same library functions as CLIs:
-`search_scenes`, `find_lake_gauge`, `lake_level` (see `tools/README.md`).
+The three "risen/fallen" measures: **extent** = footprint (km², satellite),
+**level** = surface height (ft, gauge), **storage** = quantity (acre-feet, gauge).
 
-## The water level vs. extent studies
+Tools (`tools/`) expose the same library functions as CLIs: `search_scenes`,
+`find_lake_gauge`, `lake_level`, `reservoir_storage` (see `tools/README.md`).
 
-`WaterLevelTimeSeries` overlays lake **level** (USGS gauge — surface *height*) on
-water **extent** (satellite — surface *footprint*). The gauge is auto-discovered
-from the place name (`s2.level.ResolveLakeGauge`); pass `site_id` to override.
-Three lakes map out what the method can and can't do.
+## The water level / storage vs. extent studies
+
+`WaterLevelTimeSeries` overlays lake **level** (USGS gauge — surface *height*),
+and `WaterStorageTimeSeries` overlays reservoir **storage** (USGS — water
+*quantity*, acre-feet), on water **extent** (satellite — surface *footprint*). The
+gauge is auto-discovered from the place name (`s2.level.ResolveLakeGauge`); pass
+`site_id` to override. Five lakes map out what the method can and can't do — and
+which of the three measures actually carries the signal for each.
 
 ### 1. Great Salt Lake, Utah — the ideal case
 
@@ -94,14 +100,35 @@ in 2022. Where the gauge has data the two move together (3618 ft→322 km²,
 3534 ft→181 km², 3582 ft→252 km²). **Caveat:** the USGS `62614` record for this
 site is sparse before ~2015, so the level overlay is strongest in recent years.
 
-## What the four lakes teach
+### 5. Milford Lake, Kansas — storage (the "how much water" axis)
 
-| Lake | Shore / form | Extent↔level | Optical ceiling |
-|------|--------------|--------------|-----------------|
-| Great Salt Lake | flat pan | strongly coupled | none — clear open water |
-| Lake Powell | branching canyon reservoir | coupled — recession visible | none; level record sparse pre-2015 |
-| Okeechobee | marsh-fringed | loosely (open-water core) | emergent marsh (~⅓ uncounted) |
-| Clear Lake | steep banks | decoupled (footprint flat) | algal blooms under-count |
+```bash
+scripts/ffl-run "$FFL" --workflow s2.workflows.WaterStorageTimeSeries \
+  --inputs '{"place":"Milford Lake, Kansas","buffer_km":0,"years":["2004","2009","2014","2019","2022","2024"],
+             "collection":"landsat-c2-l2","index":"mndwi","water_threshold":0.0,"max_cloud":20,
+             "exclude_platforms":"LE07"}' --task-list s2
+```
+
+Gauge `06857050`, USGS param **00054 = storage in acre-feet** (auto-discovered by
+passing `params="00054"`). A **flood-control reservoir**: the Corps holds the
+surface near conservation pool, so **extent is nearly flat (~62 km²)** while
+**storage swings 2.5×** — 332,000 ac-ft (2022 drought) to 849,000 ac-ft (2019
+Kansas flood, the one year extent also jumps, to 77 km²). **Finding:** here
+neither footprint nor height alone tells you how much water is present — the
+*quantity* (storage) carries the signal, and it's the literal answer to "how much
+has it risen or fallen." **Coverage:** USGS-gauged reservoirs (Army-Corps / state
+lakes) report 00054; Reclamation reservoirs (Powell, Mead) don't — use elevation
+or a USBR feed for those.
+
+## What the five lakes teach
+
+| Lake | Shore / form | Signal that carries | Optical ceiling |
+|------|--------------|---------------------|-----------------|
+| Great Salt Lake | flat pan | extent ↔ level (coupled) | none — clear open water |
+| Lake Powell | branching canyon reservoir | extent ↔ level (recession) | none; level record sparse pre-2015 |
+| Okeechobee | marsh-fringed | extent (open-water core only) | emergent marsh (~⅓ uncounted) |
+| Clear Lake | steep banks | level (footprint flat) | algal blooms under-count |
+| Milford Lake | flood-control reservoir | **storage** (extent flat, level alone misleads) | n/a — storage is the measure |
 
 **Extent-tuning levers** (no code change except the resolution env): `index`
 (`mndwi` for turbid), `months_from`/`months_to` (region's clear season),
