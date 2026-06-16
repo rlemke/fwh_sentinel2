@@ -302,6 +302,39 @@ def test_reservoir_storage_mock(tools_env):
     assert hr["unit"] == "ac-ft" and hr["relative_path"]
 
 
+def test_usbr_reservoir_mock(tools_env):
+    """USBR source resolves Powell/Mead by name, returns acre-feet, caches, and
+    overlays like USGS storage; unknown reservoir raises."""
+    from sentinel2.handlers.level.level_handlers import handle_fetch_usbr_storage
+
+    from _s2_tools import level
+
+    assert level.resolve_usbr_reservoir("Lake Powell, Utah")[0] == "powell"
+    assert level.resolve_usbr_reservoir("Lake Mead, NV")[0] == "mead"
+    with pytest.raises(ValueError, match="no USBR reservoir"):
+        level.resolve_usbr_reservoir("Great Salt Lake")
+
+    r = level.fetch_usbr_reservoir("Lake Mead", "2018-01-01", "2022-12-31",
+                                   metric="storage", use_mock=True)
+    assert r["unit"] == "ac-ft" and r["point_count"] > 0 and "Mead" in r["site_name"]
+
+    hr = handle_fetch_usbr_storage({"reservoir": "Lake Powell", "date_from": "2018-01-01",
+                                    "date_to": "2019-12-31", "use_mock": True})
+    assert hr["unit"] == "ac-ft" and hr["relative_path"]
+
+
+@pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
+                    reason="live USBR test; set S2_LIVE=1 to run (hits the network)")
+def test_real_usbr_storage_live(tools_env):
+    """Live USBR storage for Powell (UC hydrodata) and Mead (RISE)."""
+    from _s2_tools import level
+
+    for place, lo, hi in [("Lake Powell", 3e6, 3e7), ("Lake Mead", 5e6, 3e7)]:
+        r = level.fetch_usbr_reservoir(place, "2003-01-01", "2024-12-31", metric="storage")
+        assert r["unit"] == "ac-ft" and r["point_count"] > 1000
+        assert lo < r["min"] < r["max"] < hi
+
+
 @pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
                     reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
 def test_real_reservoir_storage_live(tools_env):

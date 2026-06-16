@@ -44,6 +44,23 @@ ELEV_PARAMS = ("62614", "62615", "00062", "00065")
 # USGS-gauged reservoirs; not by Reclamation-managed ones (Powell, Mead).
 STORAGE_PARAM = "00054"
 
+_UC_HYDRODATA = "https://www.usbr.gov/uc/water/hydrodata/reservoir_data"
+_RISE_DOWNLOAD = "https://data.usbr.gov/rise/api/result/download"
+
+# Bureau of Reclamation reservoirs that USGS does NOT gauge — their storage and
+# elevation come from USBR instead. "uc" = Upper Colorado hydrodata CSV (clean
+# datetime,value); "rise" = the RISE API CSV download (data.usbr.gov). Storage is
+# normalized to acre-feet ("ac-ft") so it overlays like USGS 00054.
+USBR_RESERVOIRS: dict[str, dict[str, Any]] = {
+    "powell": {"name": "Lake Powell (Glen Canyon Dam), USBR",
+               "source": "uc", "site": "919",
+               "datatype": {"storage": "17", "elevation": "49"}},
+    "mead": {"name": "Lake Mead (Hoover Dam), USBR",
+             "source": "rise",
+             "item": {"storage": 6124, "elevation": 6123}},
+}
+_USBR_UNIT = {"storage": "ac-ft", "elevation": "ft"}
+
 # Generic tokens dropped before name-matching a place against a station name, so
 # "Lake Powell" matches "LAKE POWELL AT GLEN CANYON DAM" on the rare token.
 _NAME_STOP = {
@@ -256,3 +273,88 @@ def _fetch_real(site_id, date_from, date_to, params_to_try) -> dict[str, Any]:
             "unit": s["variable"]["unit"]["unitCode"], "series": series,
             "point_count": len(series),
             "min": round(min(vals), 2), "max": round(max(vals), 2)}
+
+
+# ── USBR (Bureau of Reclamation) — Powell / Mead, not in USGS ──────────────────
+
+def resolve_usbr_reservoir(place: str) -> tuple[str, dict[str, Any]]:
+    """Match a place name to a USBR reservoir key (substring: 'powell'/'mead')."""
+    p = (place or "").lower()
+    for key, res in USBR_RESERVOIRS.items():
+        if key in p:
+            return key, res
+    raise ValueError(f"no USBR reservoir source for place={place!r} "
+                     f"(known: {', '.join(USBR_RESERVOIRS)})")
+
+
+def fetch_usbr_reservoir(
+    place: str, date_from: str, date_to: str, *,
+    metric: str = "storage", force: bool = False, use_mock: bool = False,
+) -> dict[str, Any]:
+    """USBR reservoir storage (acre-feet) or elevation (ft) for a Reclamation
+    reservoir that USGS doesn't gauge — Lake Powell (Upper Colorado hydrodata) or
+    Lake Mead (RISE API). Cached in the shared series cache and shaped exactly
+    like ``fetch_lake_storage``, so WaterTimeSeriesMap overlays it the same way."""
+    if metric not in _USBR_UNIT:
+        raise ValueError(f"metric must be one of {list(_USBR_UNIT)} (got {metric!r})")
+    key, res = resolve_usbr_reservoir(place)
+    rel = f"usbr-{key}/{metric}/{date_from}_{date_to}.json"
+    if not force and sidecar.exists(LAKE_LEVEL, rel):
+        doc = json.loads(storage.read_text(sidecar.cache_path(LAKE_LEVEL, rel)))
+        return {**doc, "relative_path": rel, "was_cached": True}
+
+    if use_mock:
+        doc = s2_mocks.mock_reservoir_storage(key, date_from, date_to)
+        doc["site_name"], doc["unit"] = res["name"], _USBR_UNIT[metric]
+        source = f"mock://usbr/{key}/{metric}"
+    else:
+        series = _fetch_usbr_real(res, metric, date_from, date_to)
+        if not series:
+            raise ValueError(f"USBR returned no {metric} for {res['name']} "
+                             f"over {date_from}..{date_to}")
+        vals = [p["value"] for p in series]
+        doc = {"site_id": f"usbr-{key}", "site_name": res["name"],
+               "unit": _USBR_UNIT[metric], "series": series, "point_count": len(series),
+               "min": round(min(vals), 2), "max": round(max(vals), 2)}
+        source = f"{res['source']}:{key}:{metric}"
+
+    sidecar.write(LAKE_LEVEL, rel, json.dumps(doc).encode("utf-8"),
+                  source=source, tool="fetch_usbr_reservoir")
+    return {**doc, "relative_path": rel, "was_cached": False}
+
+
+def _fetch_usbr_real(res, metric, date_from, date_to) -> list[dict[str, Any]]:
+    import csv as _csv
+    import io as _io
+
+    import requests
+
+    if res["source"] == "uc":
+        # Upper Colorado hydrodata: clean "datetime,<col>" CSV.
+        url = f"{_UC_HYDRODATA}/{res['site']}/csv/{res['datatype'][metric]}.csv"
+        resp = requests.get(url, headers={"User-Agent": _USER_AGENT}, timeout=90)
+        resp.raise_for_status()
+        out = []
+        for row in resp.text.splitlines()[1:]:  # skip "datetime,<col>" header
+            cells = row.split(",")
+            if len(cells) >= 2 and date_from <= cells[0][:10] <= date_to:
+                try:
+                    out.append({"date": cells[0][:10], "value": float(cells[1])})
+                except ValueError:
+                    pass
+        return out
+
+    # RISE CSV download: a metadata block then a "#SERIES DATA#" table whose data
+    # rows carry the unit in col 3 (af/ft), the value in col 2, the date in col 6.
+    resp = requests.get(_RISE_DOWNLOAD, params={"type": "csv", "itemId": res["item"][metric],
+                        "after": date_from, "before": date_to},
+                        headers={"User-Agent": _USER_AGENT}, timeout=120)
+    resp.raise_for_status()
+    out = []
+    for cells in _csv.reader(_io.StringIO(resp.text)):
+        if len(cells) >= 7 and cells[3] in ("af", "ft") and cells[2] not in ("", "Result"):
+            try:
+                out.append({"date": cells[6][:10], "value": float(cells[2])})
+            except ValueError:
+                pass
+    return out

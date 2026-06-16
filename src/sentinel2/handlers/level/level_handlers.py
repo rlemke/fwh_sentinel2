@@ -71,10 +71,27 @@ def handle_fetch_reservoir_storage(params: dict[str, Any]) -> dict[str, Any]:
             ("relative_path", "site_name", "unit", "point_count", "min", "max")}
 
 
+def handle_fetch_usbr_storage(params: dict[str, Any]) -> dict[str, Any]:
+    res = level.fetch_usbr_reservoir(
+        place=params["reservoir"],
+        date_from=params["date_from"],
+        date_to=params["date_to"],
+        metric=params.get("metric", "storage"),
+        force=bool(params.get("force", False)),
+        use_mock=bool(params.get("use_mock", False)),
+    )
+    logger.info("FetchUSBRStorage %r %s..%s -> %d points (%s..%s %s) %s",
+                params["reservoir"], params["date_from"], params["date_to"],
+                res["point_count"], res["min"], res["max"], res["unit"], res["site_name"])
+    return {k: res[k] for k in
+            ("relative_path", "site_name", "unit", "point_count", "min", "max")}
+
+
 _DISPATCH: dict[str, Any] = {
     f"{NAMESPACE}.ResolveLakeGauge": handle_resolve_lake_gauge,
     f"{NAMESPACE}.FetchLakeLevel": handle_fetch_lake_level,
     f"{NAMESPACE}.FetchReservoirStorage": handle_fetch_reservoir_storage,
+    f"{NAMESPACE}.FetchUSBRStorage": handle_fetch_usbr_storage,
 }
 
 

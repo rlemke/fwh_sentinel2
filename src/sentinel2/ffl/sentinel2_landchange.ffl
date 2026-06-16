@@ -295,6 +295,31 @@ namespace s2.level {
         with RetryPolicy()
         with Effect(kind = "external")
         with Cost(tier = "cheap")
+
+    /** Reservoir **storage** (or elevation) for a Bureau-of-Reclamation reservoir
+      * that USGS does *not* gauge — Lake Powell (Upper Colorado hydrodata) and
+      * Lake Mead (RISE API). `reservoir` is matched by name ("...powell..." /
+      * "...mead..."); `metric` = "storage" (acre-feet) or "elevation" (ft). Same
+      * cached series shape as FetchReservoirStorage, so WaterTimeSeriesMap
+      * overlays it identically. This fills the gap for the Colorado-River giants
+      * the USGS storage facet can't reach. */
+    event facet FetchUSBRStorage(
+        reservoir: String,
+        date_from: String,
+        date_to: String,
+        metric: String = "storage",
+        use_mock: Boolean = false
+    ) => (
+        relative_path: String,
+        site_name: String,
+        unit: String,
+        point_count: Int,
+        min: Double,
+        max: Double
+    )
+        with RetryPolicy()
+        with Effect(kind = "external")
+        with Cost(tier = "cheap")
 }
 
 namespace s2.geo {
@@ -621,6 +646,57 @@ namespace s2.workflows {
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
                 year_count = map.year_count, storage_points = storage.point_count,
                 gauge = gauge.site_name, gauge_confident = gauge.confident
+            )
+        }
+
+    /** Reservoir storage (acre-feet) vs. extent for a Bureau-of-Reclamation
+      * reservoir USGS doesn't gauge — Lake Powell or Lake Mead. Same as
+      * WaterStorageTimeSeries but the quantity comes from USBR (FetchUSBRStorage),
+      * not USGS, so there's no gauge-discovery step. Shows the Colorado-River
+      * megadrought: storage fell ~60-70% to 2022 record lows. */
+    workflow ReservoirStorageUSBR(
+        place: String = "Lake Mead, Nevada",
+        buffer_km: Double = 0.0,
+        date_from: String = "2003-01-01",
+        date_to: String = "2024-12-31",
+        years: Json,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "ndwi",
+        water_threshold: Double = 0.0,
+        max_cloud: Double = 20.0,
+        collection: String = "landsat-c2-l2",
+        exclude_platforms: String = "LE07",
+        use_mock: Boolean = false
+    ) => (
+        status: String, html_path: String, aoi: String, year_count: Int,
+        storage_points: Int, reservoir: String
+    )
+        with Author(email = "research@example.com")
+        with Teams(names = ["geo", "research"])
+        andThen {
+            loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            scanned = ScanYears(
+                aoi = loc.aoi, years = $.years, months_from = $.months_from,
+                months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
+                collection = $.collection, exclude_platforms = $.exclude_platforms,
+                use_mock = $.use_mock
+            )
+            storage = FetchUSBRStorage(
+                reservoir = $.place, date_from = $.date_from, date_to = $.date_to,
+                metric = "storage", use_mock = $.use_mock
+            )
+            map = WaterTimeSeriesMap(
+                aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
+                title = "Reservoir water: USBR storage vs. extent",
+                months_from = $.months_from, months_to = $.months_to,
+                level_relative_path = storage.relative_path,
+                dependency_signal = scanned.count
+            )
+            yield ReservoirStorageUSBR(
+                status = "completed", html_path = map.html_path, aoi = loc.aoi,
+                year_count = map.year_count, storage_points = storage.point_count,
+                reservoir = storage.site_name
             )
         }
 }
