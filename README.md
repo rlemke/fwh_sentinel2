@@ -9,6 +9,10 @@ source-adapter shape.
 Discovered by the Facetwork runner via the `facetwork.examples` entry point — no
 edits to the Facetwork repo required.
 
+> **Worked examples:** see [`EXAMPLES.md`](EXAMPLES.md) for end-to-end lake
+> water-level-vs-extent studies (Great Salt Lake, Okeechobee, Clear Lake) — the
+> FFL workflows, the `tools/` CLIs, and what each reveals (and its limits).
+
 ## Install
 
 ```bash
