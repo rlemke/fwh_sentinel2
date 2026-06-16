@@ -32,10 +32,13 @@ _USER_AGENT = "facetwork-sentinel2-landchange"
 GREAT_SALT_LAKE = "10010000"
 ELEV_PARAM = "62614"
 
-# Lake/reservoir surface-elevation parameter codes, in preference order:
+# Lake/reservoir water-level parameter codes, in preference order:
 # 62614 = elevation above NGVD29 (ft); 62615 = above NAVD88 (ft); 00062 = elevation,
-# datum varies (ft). Any one gives a self-consistent height series for one site.
-ELEV_PARAMS = ("62614", "62615", "00062")
+# datum varies (ft); 00065 = gage height (ft) — a *relative* stage in a local datum
+# (e.g. Clear Lake, CA's "Rumsey" zero), used last and only with siteType=LK so it
+# catches lake-stage gauges (not river stations). Any one gives a self-consistent
+# level series for one site; the true-elevation datums win when a lake has both.
+ELEV_PARAMS = ("62614", "62615", "00062", "00065")
 
 # Generic tokens dropped before name-matching a place against a station name, so
 # "Lake Powell" matches "LAKE POWELL AT GLEN CANYON DAM" on the rare token.
