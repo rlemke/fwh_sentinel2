@@ -12,9 +12,20 @@ edits to the Facetwork repo required.
 ## Install
 
 ```bash
-pip install -e .            # mock path only (offline)
-pip install -e ".[geo]"     # + real STAC search & COG reads (requests, rio-tiler)
+pip install -e .                 # mock path only (offline)
+pip install -e ".[geo]"          # + real STAC search & COG reads (requests, rio-tiler)
+pip install -e ".[geo,s3]"       # + write cache/output to S3/MinIO (boto3)
 ```
+
+### Storage (local or S3)
+
+All I/O goes through `_s2_tools/storage.py`. Default is local disk
+(`$AFL_CACHE_ROOT`, `$AFL_OUTPUT_BASE` / `~/afl_data`). Set `AFL_STORAGE=s3`
+(+ `AFL_DATA_ROOT=s3://<bucket>` and the usual `AFL_S3_*` endpoint/creds) and the
+cache lands at `s3://<bucket>/cache/s2/…` and the rendered map bundle at
+`s3://<bucket>/output/s2/…` — which the dashboard's `/output/raw` artifact server
+serves directly (point it at the same prefix with `AFL_S3_OUTPUT_BASE`). So a
+fleet run renders straight to MinIO and is viewable from the Runs list.
 
 ## What it does
 

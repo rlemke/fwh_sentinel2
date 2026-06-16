@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import tempfile
 from typing import Any
 
 from _s2_tools import raster, storage
@@ -45,7 +46,6 @@ def render_change_map(
 ) -> dict[str, Any]:
     out_dir = storage.join(storage.output_root(), "s2", aoi_key)
     tiles_dir = storage.join(out_dir, "tiles")
-    os.makedirs(tiles_dir, exist_ok=True)
     html_path = storage.join(out_dir, "index.html")
 
     tiled = _render_tiles(change_rel, out_dir, tiles_dir)
@@ -55,8 +55,7 @@ def render_change_map(
         # No geo stack — fall back to the self-contained canvas view.
         html = _canvas_html(title, detail or change_rel, raster.load_change_grid(change_rel))
 
-    with open(html_path, "w", encoding="utf-8") as f:
-        f.write(html)
+    storage.write_text(html_path, html)
     return {"aoi_key": aoi_key, "output_dir": out_dir, "html_path": html_path,
             "tiles_path": tiles_dir}
 
@@ -88,37 +87,41 @@ def _render_tiles(change_rel: str, out_dir: str, tiles_dir: str) -> dict[str, An
         rgb[0][sel], rgb[1][sel], rgb[2][sel] = r, g, b
         mask[sel] = 255
 
+    # GDAL/rasterio need a local file to write + tile-read; stage in a temp dir,
+    # then publish the COG and every tile through `storage` (local or S3).
     cog_path = storage.join(out_dir, "change.tif")
     transform = from_bounds(west, south, east, north, w, h)
     profile = dict(driver="GTiff", height=h, width=w, count=3, dtype="uint8",
                    crs="EPSG:4326", transform=transform, photometric="RGB",
                    compress="deflate", tiled=True, blockxsize=256, blockysize=256)
-    with rasterio.open(cog_path, "w", **profile) as dst:
-        dst.write(rgb)
-        dst.write_mask(mask)
-
     min_zoom, max_zoom = _zoom_range(west, south, east, north, max(w, h))
     tms = morecantile.tms.get("WebMercatorQuad")
     count = 0
     capped = False
-    with Reader(cog_path, tms=tms) as r:
-        for z in range(min_zoom, max_zoom + 1):
-            if capped:
-                break
-            for t in tms.tiles(west, south, east, north, [z]):
-                if count >= _MAX_TILES:
-                    capped = True
+    with tempfile.TemporaryDirectory() as td:
+        local_cog = os.path.join(td, "change.tif")
+        with rasterio.open(local_cog, "w", **profile) as dst:
+            dst.write(rgb)
+            dst.write_mask(mask)
+        with open(local_cog, "rb") as f:
+            storage.write_bytes(cog_path, f.read())
+
+        with Reader(local_cog, tms=tms) as r:
+            for z in range(min_zoom, max_zoom + 1):
+                if capped:
                     break
-                try:
-                    img = r.tile(t.x, t.y, t.z)
-                except Exception:
-                    continue  # tile fully outside data
-                png = img.render(img_format="PNG", add_mask=True)
-                tdir = storage.join(tiles_dir, str(t.z), str(t.x))
-                os.makedirs(tdir, exist_ok=True)
-                with open(storage.join(tdir, f"{t.y}.png"), "wb") as f:
-                    f.write(png)
-                count += 1
+                for t in tms.tiles(west, south, east, north, [z]):
+                    if count >= _MAX_TILES:
+                        capped = True
+                        break
+                    try:
+                        img = r.tile(t.x, t.y, t.z)
+                    except Exception:
+                        continue  # tile fully outside data
+                    png = img.render(img_format="PNG", add_mask=True)
+                    storage.write_bytes(storage.join(tiles_dir, str(t.z), str(t.x),
+                                                     f"{t.y}.png"), png)
+                    count += 1
     if capped:
         # No silent caps — say what was dropped.
         print(f"[map_render] tile cap {_MAX_TILES} hit at zoom {max_zoom}; "

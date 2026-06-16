@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from _s2_tools import s2_mocks, sidecar, stac
+from _s2_tools import s2_mocks, sidecar, stac, storage
 
 SCENE_INDEX = "scene-index"
 COMPOSITE = "composite"
@@ -52,9 +52,9 @@ def _save(cache_type: str, rel: str, arr: np.ndarray, *, bounds, crs: str,
 
 
 def _load(cache_type: str, rel: str) -> tuple[np.ndarray, np.ndarray, str]:
-    with open(sidecar.cache_path(cache_type, rel), "rb") as f:
-        npz = np.load(io.BytesIO(f.read()), allow_pickle=False)
-        return npz["data"], npz["bounds"], str(npz["crs"])
+    npz = np.load(io.BytesIO(storage.read_bytes(sidecar.cache_path(cache_type, rel))),
+                  allow_pickle=False)
+    return npz["data"], npz["bounds"], str(npz["crs"])
 
 
 def _result(cache_type, rel, ak, index, scene_count, arr, meta, *, was_cached, used_mock):

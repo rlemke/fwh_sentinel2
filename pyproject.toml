@@ -23,6 +23,10 @@ geo = [
     "requests>=2.28",
     "rio-tiler>=6",   # pulls rasterio + morecantile
 ]
+# Write the cache + map bundle to S3/MinIO (AFL_STORAGE=s3) instead of local disk.
+s3 = [
+    "boto3>=1.28",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
