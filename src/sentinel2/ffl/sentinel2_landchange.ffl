@@ -241,6 +241,34 @@ namespace s2.level {
         with RetryPolicy()
         with Effect(kind = "external")
         with Cost(tier = "cheap")
+
+    /** Find the best USGS lake-elevation gauge for an AOI so *any* US lake works
+      * without a hardcoded site. Discovers LK-type gauges (params 62614/62615/
+      * 00062) in the margin-expanded AOI bbox and picks the one whose station
+      * name best matches `place` (then nearest to centroid). `site_id` (non-"")
+      * is an explicit override. `confident=false` means it fell back to nearest
+      * with no name match — verify or override. Raises when the lake has no USGS
+      * gauge at all (e.g. Reclamation reservoirs like Lake Mead). */
+    event facet ResolveLakeGauge(
+        aoi: String,
+        place: String = "",
+        site_id: String = "",
+        margin_deg: Double = 0.1,
+        use_mock: Boolean = false
+    ) => (
+        site_id: String,
+        param: String,
+        site_name: String,
+        lat: Double,
+        lon: Double,
+        distance_km: Double,
+        confident: Boolean,
+        candidate_count: Int,
+        source: String
+    )
+        with RetryPolicy()
+        with Effect(kind = "external")
+        with Cost(tier = "cheap")
 }
 
 namespace s2.geo {
@@ -460,7 +488,7 @@ namespace s2.workflows {
     workflow WaterLevelTimeSeries(
         place: String = "Great Salt Lake, Utah",
         buffer_km: Double = 20.0,
-        site_id: String = "10010000",
+        site_id: String = "",
         date_from: String = "2003-01-01",
         date_to: String = "2024-12-31",
         years: Json,
@@ -471,19 +499,25 @@ namespace s2.workflows {
         max_cloud: Double = 25.0,
         collection: String = "landsat-c2-l2",
         use_mock: Boolean = false
-    ) => (status: String, html_path: String, aoi: String, year_count: Int, level_points: Int)
+    ) => (
+        status: String, html_path: String, aoi: String, year_count: Int,
+        level_points: Int, gauge: String, gauge_confident: Boolean
+    )
         with Author(email = "research@example.com")
         with Teams(names = ["geo", "research"])
         andThen {
             loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            gauge = ResolveLakeGauge(
+                aoi = loc.aoi, place = $.place, site_id = $.site_id, use_mock = $.use_mock
+            )
             scanned = ScanYears(
                 aoi = loc.aoi, years = $.years, months_from = $.months_from,
                 months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
                 collection = $.collection, use_mock = $.use_mock
             )
             level = FetchLakeLevel(
-                site_id = $.site_id, date_from = $.date_from, date_to = $.date_to,
-                use_mock = $.use_mock
+                site_id = gauge.site_id, param = gauge.param,
+                date_from = $.date_from, date_to = $.date_to, use_mock = $.use_mock
             )
             map = WaterTimeSeriesMap(
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
@@ -493,7 +527,8 @@ namespace s2.workflows {
             )
             yield WaterLevelTimeSeries(
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
-                year_count = map.year_count, level_points = level.point_count
+                year_count = map.year_count, level_points = level.point_count,
+                gauge = gauge.site_name, gauge_confident = gauge.confident
             )
         }
 }

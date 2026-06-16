@@ -254,6 +254,29 @@ def test_lake_level_mock_and_overlay(tools_env):
     assert hr["point_count"] > 0 and hr["relative_path"]
 
 
+def test_gauge_lookup_offline(tools_env):
+    """RDB parsing + name-preference scoring + mock/override, no network."""
+    from _s2_tools import level
+
+    # RDB parse: comment lines, header, format row, then data.
+    rdb = ("# comment\nagency_cd\tsite_no\tstation_nm\tsite_tp_cd\tdec_lat_va\tdec_long_va\n"
+           "5s\t15s\t30s\t5s\t16s\t16s\n"
+           "USGS\t09379900\tLAKE POWELL AT GLEN CANYON DAM, AZ\tLK\t36.9366\t-111.4840\n"
+           "USGS\t10336710\tMARLETTE LAKE NR CARSON CITY, NV\tLK\t39.1729\t-119.9055\n")
+    rows = level._parse_rdb(rdb)
+    assert len(rows) == 2 and rows[0]["site_no"] == "09379900"
+
+    # name-token matching drops generic words ("lake") and matches the rare one.
+    assert "powell" in level._tokens("Lake Powell")
+    assert "lake" not in level._tokens("Lake Powell")
+
+    # explicit override + mock paths (no network).
+    ov = level.find_lake_gauge("-112,40,-111,41", site_id="10010000")
+    assert ov["site_id"] == "10010000" and ov["source"] == "explicit"
+    mk = level.find_lake_gauge("-112,40,-111,41", place="Great Salt Lake", use_mock=True)
+    assert mk["site_id"] == level.GREAT_SALT_LAKE and mk["confident"] is True
+
+
 @pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
                     reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
 def test_real_lake_level_live(tools_env):
@@ -263,6 +286,19 @@ def test_real_lake_level_live(tools_env):
     lv = level.fetch_lake_level("10010000", "2020-01-01", "2022-12-31", use_mock=False)
     assert lv["point_count"] > 300 and lv["unit"] == "ft"
     assert 4180 < lv["min"] < lv["max"] < 4220  # GSL elevation band, ft NGVD29
+
+
+@pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
+                    reason="live USGS test; set S2_LIVE=1 to run (hits the network)")
+def test_real_gauge_lookup_live(tools_env):
+    """Live gauge discovery: a named lake resolves to its USGS elevation gauge."""
+    from _s2_tools import level
+
+    g = level.find_lake_gauge("-111.7,36.85,-110.8,37.55", place="Lake Powell")
+    assert g["site_id"] == "09379900" and g["confident"] is True
+    # a Reclamation reservoir with no USGS elevation gauge raises clearly.
+    with pytest.raises(ValueError, match="no USGS lake-elevation gauge"):
+        level.find_lake_gauge("-114.95,35.9,-114.3,36.6", place="Lake Mead")
 
 
 def test_unknown_method_rejected(tools_env):

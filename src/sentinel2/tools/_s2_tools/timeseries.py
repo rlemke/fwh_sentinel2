@@ -202,7 +202,7 @@ function buildChart(){
   var ctx=document.getElementById('chart');
   if(cfg.level){
     var L=cfg.level;window._extentDs=1;
-    document.getElementById('sub').textContent='water extent (NDWI, km²) vs. lake level (gauge, '+L.unit+')';
+    document.getElementById('sub').textContent='water extent (NDWI, km²) vs. lake level ('+L.unit+')'+(L.siteName?' — '+L.siteName:'');
     window._chart=new Chart(ctx,{type:'line',
       data:{datasets:[
         {label:'level ('+L.unit+')',yAxisID:'yL',data:L.line.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#b2182b',borderWidth:1.5,pointRadius:0,tension:0},

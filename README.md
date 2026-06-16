@@ -101,15 +101,27 @@ on one **dual-axis** chart (level left, area right) with the year tab bar. Over
 4190.0 ft, extent its minimum) and recover by 2024 — an independent gauge
 corroborating the satellite.
 
+The gauge is **auto-discovered** for the place (`s2.level.ResolveLakeGauge`): it
+searches USGS for lake/reservoir (`siteType=LK`) elevation gauges in the AOI and
+picks the one whose station name best matches `place`, else the nearest (flagged
+`confident=false`). So *any* US lake with a USGS gauge works by name — Lake Powell
+→ `09379900`, Lake Okeechobee → `02276400`, Great Salt Lake → `10010000`. Pass
+`site_id` to override; lakes with **no** USGS gauge (e.g. Bureau-of-Reclamation
+reservoirs like **Lake Mead**) fail with a clear message — supply a `site_id` or
+drop the level overlay.
+
 ```bash
+# any US lake by name — the gauge is found automatically
 scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
-  --inputs '{"place":"Antelope Island, Utah","buffer_km":20,"site_id":"10010000","date_from":"2003-07-01","date_to":"2024-12-31","years":["2004","2009","2014","2019","2022","2024"],"collection":"landsat-c2-l2","water_threshold":0.0,"max_cloud":25,"use_mock":false}' --task-list s2
+  --inputs '{"place":"Lake Okeechobee, Florida","buffer_km":25,"date_from":"2003-07-01","date_to":"2024-12-31","years":["2004","2009","2014","2019","2022","2024"],"collection":"landsat-c2-l2","water_threshold":0.0,"max_cloud":25,"use_mock":false}' --task-list s2
 ```
 
-> The default gauge (`10010000`, param `62614`) is the Great Salt Lake south arm;
-> its level is for that arm while the extent AOI may span both arms (the causeway
-> separates them), so don't expect a perfectly monotone area↔height map — the
-> joint 2022 minimum and overall trend are the signal.
+> A gauge measures one point (e.g. the Great Salt Lake south-arm gauge), while
+> the extent AOI may span more (the causeway splits the lake's two arms), so
+> don't expect a perfectly monotone area↔height map — the joint 2022 minimum and
+> overall trend are the signal. Auto-discovery matches on the **place name**, so
+> name the lake (`"Great Salt Lake"`), not a feature in it (`"Antelope Island"`),
+> for a confident match — or pass `site_id`.
 
 ## Run
 

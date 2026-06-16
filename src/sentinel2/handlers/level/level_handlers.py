@@ -17,6 +17,24 @@ logger = logging.getLogger("s2.level")
 NAMESPACE = "s2.level"
 
 
+def handle_resolve_lake_gauge(params: dict[str, Any]) -> dict[str, Any]:
+    res = level.find_lake_gauge(
+        aoi=params["aoi"],
+        place=params.get("place", ""),
+        site_id=params.get("site_id", ""),
+        margin_deg=float(params.get("margin_deg", 0.1)),
+        use_mock=bool(params.get("use_mock", False)),
+    )
+    msg = ("ResolveLakeGauge aoi=%s place=%r -> %s %r param=%s (%.1f km, %d candidates)"
+           % (params["aoi"], params.get("place", ""), res["site_id"],
+              res["site_name"], res["param"], res["distance_km"], res["candidate_count"]))
+    if res["confident"]:
+        logger.info(msg)
+    else:
+        logger.warning("%s — LOW CONFIDENCE (no name match); verify or pass site_id", msg)
+    return res
+
+
 def handle_fetch_lake_level(params: dict[str, Any]) -> dict[str, Any]:
     res = level.fetch_lake_level(
         site_id=params.get("site_id", level.GREAT_SALT_LAKE),
@@ -35,6 +53,7 @@ def handle_fetch_lake_level(params: dict[str, Any]) -> dict[str, Any]:
 
 
 _DISPATCH: dict[str, Any] = {
+    f"{NAMESPACE}.ResolveLakeGauge": handle_resolve_lake_gauge,
     f"{NAMESPACE}.FetchLakeLevel": handle_fetch_lake_level,
 }
 
