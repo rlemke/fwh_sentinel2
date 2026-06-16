@@ -136,3 +136,30 @@ or a USBR feed for those.
 (drop Landsat-7 striping). Beyond these, optical water indices map **open water,
 not marsh or bloom-covered water** — the full footprint of such lakes needs
 land-cover classification or a published lake mask, not index tuning.
+
+## Run from the catalog (no file)
+
+These workflows are published in the Claude workflow catalog, so they run by
+slug — `fw_catalog_run` pins a revision and submits to the runtime (dashboard
+-visible). One shared library holds the FFL; each workflow is a thin entry
+pinned to it.
+
+| Slug | Entry workflow | Answers |
+|------|----------------|---------|
+| `s2.water-extent-timeseries` | `WaterTimeSeries` | footprint (km²) over the years |
+| `s2.water-level-vs-extent` | `WaterLevelTimeSeries` | level (ft, gauge) vs extent |
+| `s2.reservoir-storage-vs-extent` | `WaterStorageTimeSeries` | **storage (acre-feet) vs extent — the "how much water" axis** |
+| `s2.landchange-lib` | *(library)* | shared facets + workflows the three depend on |
+
+```text
+# storage (quantity) for a USGS-gauged reservoir — gauge auto-discovered by name
+fw_catalog_run slug="s2.reservoir-storage-vs-extent" inputs={
+  "place": "Milford Lake, Kansas",
+  "years": ["2004","2009","2014","2019","2022","2024"]
+}
+```
+
+Discover by intent first with `fw_catalog_match` ("how much water does a
+reservoir hold over time") → it returns these with each one's `param_schema`
+to fill. Reclamation reservoirs (Powell, Mead) don't report storage to USGS —
+use `s2.water-level-vs-extent` (elevation) for those.
