@@ -23,7 +23,7 @@ def handle_search_scenes(params: dict[str, Any]) -> dict[str, Any]:
         date_to=params["date_to"],
         max_cloud=float(params.get("max_cloud", 20.0)),
         collection=params.get("collection", "sentinel-2-l2a"),
-        stac_url=params.get("stac_url", "https://earth-search.aws.element84.com/v1"),
+        stac_url=params.get("stac_url", ""),
         use_mock=bool(params.get("use_mock", False)),
     )
     scene_ids = [s["scene_id"] for s in scenes]

@@ -1,10 +1,18 @@
-"""STAC search for Sentinel-2 L2A scenes.
+"""STAC search + asset resolution for Sentinel-2 and Landsat.
 
-Queries a STAC API (default Element84 Earth Search v1 over AWS Open Data) with a
-bbox + datetime + ``eo:cloud_cover`` filter, paginating the item feed. Scene
-asset (band) hrefs are resolved on demand via ``get_item_assets``. The mock path
-returns a deterministic scene list offline. Dependency-light: ``requests`` only,
-so the tool stays runtime-free per the tools-pattern contract.
+Two providers, chosen by collection (and auto-detected from the scene id at
+fetch time):
+
+- **Sentinel-2 L2A** via Element84 Earth Search (AWS Open Data) — free, anonymous,
+  ~2017→. Bands red/nir/green/swir16; SR = DN * 1e-4.
+- **Landsat Collection-2 L2** via Microsoft Planetary Computer — free, but asset
+  hrefs need **signing** (a SAS token); covers ~1984→. Bands red/nir08/green/
+  swir16; SR = DN * 2.75e-5 − 0.2.
+
+Indices are computed on **surface reflectance** (scale+offset applied) so the two
+sensors are comparable in a time series. Search needs only ``requests``; reading
+Landsat needs ``planetary-computer`` (``pip install -e ".[landsat]"``). The mock
+path is offline.
 """
 
 from __future__ import annotations
@@ -13,11 +21,40 @@ from typing import Any
 
 from _s2_tools import s2_mocks
 
-# Element84 Earth Search asset keys for the bands we use.
-_BAND_ASSETS = {"red": "red", "nir": "nir", "green": "green", "swir16": "swir16"}
 _USER_AGENT = "facetwork-sentinel2-landchange"
 _PAGE_LIMIT = 100
-_MAX_PAGES = 20  # safety cap; bump for very wide windows
+_MAX_PAGES = 20
+
+_EARTH_SEARCH = "https://earth-search.aws.element84.com/v1"
+_PLANETARY_COMPUTER = "https://planetarycomputer.microsoft.com/api/stac/v1"
+
+# Per-collection provider: STAC endpoint, band→asset-key map, reflectance
+# scale/offset, and whether asset hrefs must be signed.
+PROVIDERS: dict[str, dict[str, Any]] = {
+    "sentinel-2-l2a": {
+        "collection": "sentinel-2-l2a", "stac": _EARTH_SEARCH, "sign": False,
+        "bands": {"red": "red", "nir": "nir", "green": "green", "swir16": "swir16"},
+        "scale": 0.0001, "offset": 0.0,
+        # Sentinel-2 COGs are on a public AWS bucket — read anonymously.
+        "gdal_env": {"AWS_NO_SIGN_REQUEST": "YES", "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR"},
+    },
+    "landsat-c2-l2": {
+        "collection": "landsat-c2-l2", "stac": _PLANETARY_COMPUTER, "sign": True,
+        "bands": {"red": "red", "nir": "nir08", "green": "green", "swir16": "swir16"},
+        "scale": 0.0000275, "offset": -0.2,
+        # Signed Azure blobs — a plain /vsicurl read (no AWS env, which would
+        # misroute the request).
+        "gdal_env": {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR"},
+    },
+}
+
+
+def provider_for(scene_id: str | None = None, collection: str | None = None) -> dict[str, Any]:
+    """Resolve the provider. A Landsat scene id (starts with 'L') wins, so a
+    FetchSceneIndex step that only has the id still routes correctly."""
+    if scene_id and str(scene_id)[:1].upper() == "L":
+        return PROVIDERS["landsat-c2-l2"]
+    return PROVIDERS.get(collection or "", PROVIDERS["sentinel-2-l2a"])
 
 
 def parse_bbox(aoi: str) -> tuple[float, float, float, float]:
@@ -34,33 +71,32 @@ def search(
     *,
     max_cloud: float = 20.0,
     collection: str = "sentinel-2-l2a",
-    stac_url: str = "https://earth-search.aws.element84.com/v1",
+    stac_url: str = "",
     use_mock: bool = False,
 ) -> list[dict[str, Any]]:
-    """Return a list of scene dicts {scene_id, datetime, cloud_pct, cog_href}."""
-    parse_bbox(aoi)  # validate early
+    """Return scene dicts {scene_id, datetime, cloud_pct}. ``stac_url`` is an
+    optional override; by default the collection's provider endpoint is used."""
+    parse_bbox(aoi)
     if use_mock:
         ids = s2_mocks.mock_scene_ids(aoi, date_from, date_to, max_cloud)
-        return [
-            {"scene_id": sid, "datetime": f"{date_from}T10:00:00Z", "cloud_pct": 5.0,
-             "cog_href": f"mock://{sid}"}
-            for sid in ids
-        ]
+        return [{"scene_id": sid, "datetime": f"{date_from}T10:00:00Z", "cloud_pct": 5.0}
+                for sid in ids]
     return _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url)
 
 
 def _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url):
     import requests
 
-    bbox = list(parse_bbox(aoi))
+    prov = provider_for(collection=collection)
+    base = (stac_url or prov["stac"]).rstrip("/")
     body = {
-        "collections": [collection],
-        "bbox": bbox,
+        "collections": [prov["collection"]],
+        "bbox": list(parse_bbox(aoi)),
         "datetime": f"{date_from}T00:00:00Z/{date_to}T23:59:59Z",
         "query": {"eo:cloud_cover": {"lt": max_cloud}},
         "limit": _PAGE_LIMIT,
     }
-    url = stac_url.rstrip("/") + "/search"
+    url = base + "/search"
     out: list[dict[str, Any]] = []
     session = requests.Session()
     session.headers["User-Agent"] = _USER_AGENT
@@ -74,33 +110,38 @@ def _search_real(aoi, date_from, date_to, max_cloud, collection, stac_url):
                 "scene_id": feat["id"],
                 "datetime": props.get("datetime", ""),
                 "cloud_pct": float(props.get("eo:cloud_cover", 0.0)),
-                "cog_href": "",  # band hrefs resolved lazily via get_item_assets
             })
         nxt = next((lnk for lnk in doc.get("links", []) if lnk.get("rel") == "next"), None)
         if not nxt:
             break
-        # Earth Search "next" carries the full body in the link; re-POST it.
         body = nxt.get("body", body)
         url = nxt.get("href", url)
     return out
 
 
 def get_item_assets(
-    scene_id: str,
-    *,
-    collection: str = "sentinel-2-l2a",
-    stac_url: str = "https://earth-search.aws.element84.com/v1",
+    scene_id: str, *, collection: str | None = None, stac_url: str = "",
 ) -> dict[str, str]:
-    """Resolve a scene's band asset hrefs: {band_name: href} for red/nir/green/swir16."""
+    """Resolve a scene's band asset hrefs {red,nir,green,swir16}. Landsat hrefs
+    (Planetary Computer) are signed with a SAS token so they're readable."""
     import requests
 
-    url = f"{stac_url.rstrip('/')}/collections/{collection}/items/{scene_id}"
+    prov = provider_for(scene_id=scene_id, collection=collection)
+    base = (stac_url or prov["stac"]).rstrip("/")
+    url = f"{base}/collections/{prov['collection']}/items/{scene_id}"
     resp = requests.get(url, headers={"User-Agent": _USER_AGENT}, timeout=30)
     resp.raise_for_status()
     assets = resp.json().get("assets", {})
+
+    sign = None
+    if prov["sign"]:
+        import planetary_computer as pc
+
+        sign = pc.sign
+
     hrefs: dict[str, str] = {}
-    for band, asset_key in _BAND_ASSETS.items():
+    for band, asset_key in prov["bands"].items():
         asset = assets.get(asset_key)
         if asset and asset.get("href"):
-            hrefs[band] = asset["href"]
+            hrefs[band] = sign(asset["href"]) if sign else asset["href"]
     return hrefs

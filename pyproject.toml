@@ -27,6 +27,10 @@ geo = [
 s3 = [
     "boto3>=1.28",
 ]
+# Landsat Collection-2 L2 via Microsoft Planetary Computer (signed assets, ~1984+).
+landsat = [
+    "planetary-computer>=1.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

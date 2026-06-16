@@ -14,6 +14,7 @@ edits to the Facetwork repo required.
 ```bash
 pip install -e .                 # mock path only (offline)
 pip install -e ".[geo]"          # + real STAC search & COG reads (requests, rio-tiler)
+pip install -e ".[geo,landsat]"  # + Landsat C2 L2 via Planetary Computer (planetary-computer) — ~1984+
 pip install -e ".[geo,s3]"       # + write cache/output to S3/MinIO (boto3)
 ```
 
@@ -32,8 +33,10 @@ fleet run renders straight to MinIO and is viewable from the Runs list.
 Entry workflow **`s2.workflows.AnalyzeAOI`**. For a **baseline** and a **recent**
 window:
 
-1. **`s2.source.SearchScenes`** — STAC query (Element84 Earth Search over AWS Open
-   Data) for Sentinel-2 L2A scenes intersecting the AOI under a cloud ceiling.
+1. **`s2.source.SearchScenes`** — STAC query for scenes intersecting the AOI under
+   a cloud ceiling. Provider is chosen by `collection`: Sentinel-2 L2A via Element84
+   Earth Search (AWS Open Data, ~2017+) or Landsat C2 L2 via the Planetary Computer
+   (~1984+, signed). See the **Range note** below.
 2. **`s2.scan.ScanScenes`** — `andThen foreach` fan-out: one parallel
    **`s2.source.FetchSceneIndex`** step per scene, window-reading the bands (COG
    range requests via rio-tiler), computing a spectral index (NDVI/NDWI/NDBI), and
@@ -69,9 +72,21 @@ scripts/ffl-run "$FFL" --workflow s2.workflows.WaterTimeSeries \
   --inputs '{"place":"Antelope Island, Utah","buffer_km":12,"years":["2017","2019","2021","2022","2024"],"index":"ndwi","water_threshold":0.1,"use_mock":false}' --task-list s2
 ```
 
-> **Range note.** Sentinel-2 starts ~2017. A true 20-year span needs a Landsat
-> source (1984+); Landsat on AWS is requester-pays and the free Planetary
-> Computer copy needs URL signing — a drop-in `s2.source` sibling, not yet wired.
+> **Range note.** Sentinel-2 starts ~2017. For a true multi-decade span, pass
+> `"collection":"landsat-c2-l2"` — Landsat Collection-2 L2 via the
+> [Microsoft Planetary Computer](https://planetarycomputer.microsoft.com) covers
+> **~1984→present** (free; asset hrefs are signed with a SAS token, so install
+> `".[geo,landsat]"`). The same `WaterTimeSeries`/`AnalyzeAOI` path serves both
+> sensors: the provider is chosen per scene (a Landsat scene id auto-routes to
+> Planetary Computer + signing), and indices are computed on surface reflectance
+> so the two sensors are comparable across the series. AWS's `usgs-landsat` copy
+> is requester-pays and is deliberately **not** used. Example — a 20-year Landsat
+> water series over the Great Salt Lake:
+>
+> ```bash
+> scripts/ffl-run "$FFL" --workflow s2.workflows.WaterTimeSeries \
+>   --inputs '{"place":"Antelope Island, Utah","buffer_km":20,"collection":"landsat-c2-l2","years":["2004","2009","2014","2019","2022","2024"],"index":"ndwi","water_threshold":0.0,"max_cloud":25,"use_mock":false}' --task-list s2
+> ```
 
 ## Run
 

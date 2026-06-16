@@ -250,6 +250,47 @@ def test_real_stac_search_live(tools_env):
     assert "nir" in assets and "red" in assets and assets["nir"].startswith(("http", "s3"))
 
 
+# ── provider routing (Sentinel-2 vs Landsat) ────────────────────────────────────
+
+
+def test_provider_routing(tools_env):
+    """A Landsat scene id (starts 'L') routes to Planetary Computer + signing,
+    regardless of the collection arg; everything else defaults to Sentinel-2 on
+    Earth Search. Pure dict lookup — no network."""
+    from _s2_tools import stac
+
+    s2 = stac.provider_for(scene_id="S2A_T12TUL_20240715", collection="sentinel-2-l2a")
+    assert s2["collection"] == "sentinel-2-l2a" and s2["sign"] is False
+    assert s2["gdal_env"].get("AWS_NO_SIGN_REQUEST") == "YES"
+
+    # scene id wins even when the (stale) collection arg says Sentinel-2.
+    ls = stac.provider_for(scene_id="LT05_L2SP_039032_20040911_02_T1",
+                           collection="sentinel-2-l2a")
+    assert ls["collection"] == "landsat-c2-l2" and ls["sign"] is True
+    assert ls["bands"]["nir"] == "nir08"  # Landsat NIR asset key differs
+    assert "AWS_NO_SIGN_REQUEST" not in ls["gdal_env"]  # signed Azure, not AWS
+
+    # collection-only routing (no scene id) still works.
+    assert stac.provider_for(collection="landsat-c2-l2")["collection"] == "landsat-c2-l2"
+
+
+@pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
+                    reason="live STAC test; set S2_LIVE=1 to run (hits the network)")
+def test_real_landsat_read_live(tools_env):
+    """Live Landsat C2 L2 read via Planetary Computer: search -> sign -> window
+    read a real NDWI raster (no AWS requester-pays error)."""
+    from _s2_tools import raster, stac
+
+    aoi = "-112.45,40.95,-112.25,41.15"  # Great Salt Lake (Antelope Island box)
+    scenes = stac.search(aoi, "2004-07-01", "2004-09-30", max_cloud=20.0,
+                         collection="landsat-c2-l2", use_mock=False)
+    assert scenes and scenes[0]["scene_id"][:1].upper() == "L"
+    assets = stac.get_item_assets(scenes[0]["scene_id"])
+    assert "blob.core.windows.net" in assets["green"] and "?" in assets["green"]  # signed
+    res = raster.fetch_scene_index(scenes[0]["scene_id"], aoi, index="ndwi", use_mock=False)
+    assert res["width"] > 0 and res["height"] > 0
+
+
 # ── handler dispatch ───────────────────────────────────────────────────────────
 
 

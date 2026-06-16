@@ -72,7 +72,7 @@ def _result(cache_type, rel, ak, index, scene_count, arr, meta, *, was_cached, u
 def fetch_scene_index(
     scene_id: str, aoi: str, *, index: str = "ndvi", force: bool = False,
     use_mock: bool = False, collection: str = "sentinel-2-l2a",
-    stac_url: str = "https://earth-search.aws.element84.com/v1",
+    stac_url: str = "",  # "" → use the collection's provider endpoint (see stac.PROVIDERS)
 ) -> dict[str, Any]:
     if index not in _BANDS:
         raise ValueError(f"unknown index {index!r} (known: {sorted(_BANDS)})")
@@ -96,30 +96,33 @@ def fetch_scene_index(
 
 def _fetch_real(scene_id, aoi, index, collection, stac_url):
     """Window-read the two index bands for the AOI and compute the index."""
-    import os
-
+    import rasterio
     from rio_tiler.io import Reader  # rasterio-backed COG reader
 
-    # Public Sentinel-2 COGs on AWS are anonymous-readable.
-    os.environ.setdefault("AWS_NO_SIGN_REQUEST", "YES")
-    os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
-
+    prov = stac.provider_for(scene_id=scene_id, collection=collection)
     num_band, den_band = _BANDS[index]
     assets = stac.get_item_assets(scene_id, collection=collection, stac_url=stac_url)
     bbox = list(stac.parse_bbox(aoi))
+    scale, offset = prov["scale"], prov["offset"]
+    gdal_env = prov.get("gdal_env", {})
 
     def _read(band: str) -> np.ndarray:
-        href = assets[band]
-        with Reader(href) as r:
+        # Per-provider GDAL config: anonymous AWS for Sentinel-2, plain /vsicurl
+        # for the signed Azure (Landsat) URLs.
+        with rasterio.Env(**gdal_env), Reader(assets[band]) as r:
             img = r.part(bbox, bounds_crs="epsg:4326", dst_crs="epsg:4326", max_size=MAX_SIZE)
-        return img.data[0].astype("float32")
+        raw = img.data[0].astype("float32")
+        # raw DN -> surface reflectance, so S2 and Landsat are comparable.
+        sr = raw * scale + offset
+        sr[raw == 0] = 0.0  # fill value
+        return sr
 
     num = _read(num_band)
     den = _read(den_band)
     denom = num + den
     with np.errstate(divide="ignore", invalid="ignore"):
         idx = np.where(denom != 0, (num - den) / denom, 0.0).astype("float32")
-    return idx, f"{stac_url}::{scene_id}::{num_band}-{den_band}"
+    return idx, f"{prov['collection']}::{scene_id}::{num_band}-{den_band}"
 
 
 # ── composite ────────────────────────────────────────────────────────────────

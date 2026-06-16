@@ -59,7 +59,7 @@ namespace s2.source {
         date_to: String,
         max_cloud: Double = 20.0,
         collection: String = "sentinel-2-l2a",
-        stac_url: String = "https://earth-search.aws.element84.com/v1",
+        stac_url: String = "",
         use_mock: Boolean = false
     ) => (count: Int, scene_ids: Json)
         with RetryPolicy()
@@ -390,8 +390,9 @@ namespace s2.workflows {
 
     /** Surface-water change over many years for a named place: geocode -> a
       * water composite per year (ScanYears fan-out) -> a MapLibre viewer with a
-      * year slider/tab bar + a water-area chart. Sentinel-2 covers ~2017+; a
-      * Landsat source would extend this back to the 1980s. */
+      * year slider/tab bar + a water-area chart. collection="sentinel-2-l2a"
+      * covers ~2017+; collection="landsat-c2-l2" (Planetary Computer) extends
+      * this back to ~1984 — pass it for a true multi-decade series. */
     workflow WaterTimeSeries(
         place: String = "Great Salt Lake, Utah",
         buffer_km: Double = 20.0,
