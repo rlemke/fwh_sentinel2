@@ -320,6 +320,17 @@ def test_unknown_index_rejected(tools_env):
         raster.fetch_scene_index("S2_X", "-1,-1,1,1", index="bogus", use_mock=True)
 
 
+def test_mndwi_index(tools_env):
+    """MNDWI (green vs SWIR) is a known index and runs through the mock chain —
+    the turbid-water index for lakes like Okeechobee."""
+    from _s2_tools import raster
+
+    assert raster._BANDS["mndwi"] == ("green", "swir16")
+    res = raster.fetch_scene_index("S2_MOCK_2022-07-01_2022-09-30_00", "-81,26,-80,27",
+                                   index="mndwi", use_mock=True)
+    assert res["cache_type"] == "scene-index" and res["width"] > 0
+
+
 @pytest.mark.skipif(os.environ.get("S2_LIVE") != "1",
                     reason="live STAC test; set S2_LIVE=1 to run (hits the network)")
 def test_real_stac_search_live(tools_env):

@@ -28,7 +28,14 @@ COMPOSITE = "composite"
 CHANGE = "change"
 
 # (numerator_band, denominator_band) for a normalized-difference index.
-_BANDS = {"ndvi": ("nir", "red"), "ndwi": ("green", "nir"), "ndbi": ("swir16", "nir")}
+# mndwi (green vs SWIR) detects turbid / sediment-laden / vegetated water far
+# better than ndwi (green vs NIR) — use it for lakes like Okeechobee.
+_BANDS = {
+    "ndvi": ("nir", "red"),
+    "ndwi": ("green", "nir"),
+    "mndwi": ("green", "swir16"),
+    "ndbi": ("swir16", "nir"),
+}
 
 # Longest output edge for a real COG read (keeps tiles small + scenes aligned).
 MAX_SIZE = 512

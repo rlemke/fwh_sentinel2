@@ -110,7 +110,8 @@ def render_water_timeseries(
                             img.render(img_format="PNG", add_mask=True))
 
     level_cfg = _level_cfg(level, series) if level else None
-    html = _html(title, series, bounds_out, minz, maxz, geo, basemap_url, level_cfg)
+    html = _html(title, series, bounds_out, minz, maxz, geo, basemap_url, level_cfg,
+                 index.upper())
     html_path = storage.join(out_dir, "index.html")
     storage.write_text(html_path, html)
     return {"aoi_key": ak, "output_dir": out_dir, "html_path": html_path,
@@ -134,11 +135,11 @@ def _level_cfg(level: dict[str, Any], series: list[dict[str, Any]]) -> dict[str,
             "siteName": level.get("site_name", "")}
 
 
-def _html(title, series, bounds, minz, maxz, geo, basemap_url, level=None) -> str:
+def _html(title, series, bounds, minz, maxz, geo, basemap_url, level=None, index="NDWI") -> str:
     basemap = [basemap_url] if basemap_url else map_render._BASEMAP
     cfg = {"series": series, "bounds": bounds, "minz": minz, "maxz": maxz,
            "basemap": basemap, "basemapAttr": map_render._BASEMAP_ATTR, "geo": geo,
-           "level": level}
+           "level": level, "index": index}
     return _TS_HTML.replace("__TITLE__", title).replace("__CFG__", json.dumps(cfg))
 
 
@@ -164,7 +165,7 @@ _TS_HTML = """<!DOCTYPE html>
 </style></head><body>
 <div id="m"></div>
 <div class="panel">
- <h3>__TITLE__</h3><div class="sub" id="sub">water extent (NDWI) — scrub the years</div>
+ <h3>__TITLE__</h3><div class="sub" id="sub">water extent — scrub the years</div>
  <div class="tabs" id="tabs"></div>
  <div class="yearrow"><span class="ybadge" id="ylabel"></span>
    <input type="range" id="slider" min="0" value="0" step="1">
@@ -202,7 +203,7 @@ function buildChart(){
   var ctx=document.getElementById('chart');
   if(cfg.level){
     var L=cfg.level;window._extentDs=1;
-    document.getElementById('sub').textContent='water extent (NDWI, km²) vs. lake level ('+L.unit+')'+(L.siteName?' — '+L.siteName:'');
+    document.getElementById('sub').textContent='water extent ('+cfg.index+', km²) vs. lake level ('+L.unit+')'+(L.siteName?' — '+L.siteName:'');
     window._chart=new Chart(ctx,{type:'line',
       data:{datasets:[
         {label:'level ('+L.unit+')',yAxisID:'yL',data:L.line.map(function(p){return {x:p[0],y:p[1]};}),borderColor:'#b2182b',borderWidth:1.5,pointRadius:0,tension:0},
@@ -216,6 +217,7 @@ function buildChart(){
           yR:{position:'right',title:{display:true,text:'water km²'},grid:{drawOnChartArea:false}}}}});
   }else{
     window._extentDs=0;
+    document.getElementById('sub').textContent='water extent ('+cfg.index+', km²) — scrub the years';
     window._chart=new Chart(ctx,{type:'line',
       data:{labels:S.map(function(s){return s.year;}),datasets:[{label:'water km²',data:S.map(function(s){return s.area_km2;}),borderColor:'#2166ac',backgroundColor:'rgba(33,102,172,.15)',fill:true,tension:.25,pointRadius:3}]},
       options:{plugins:{legend:{display:false}},onClick:function(e,el){if(el.length)show(el[0].index);},scales:{y:{title:{display:true,text:'km²'}}}}});
