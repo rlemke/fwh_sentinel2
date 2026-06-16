@@ -123,6 +123,23 @@ scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
 > name the lake (`"Great Salt Lake"`), not a feature in it (`"Antelope Island"`),
 > for a confident match — or pass `site_id`.
 
+**Tuning extent for a large or turbid lake.** Three levers, no code change except
+the resolution env:
+> - **`index`**: `"mndwi"` (green vs SWIR) detects turbid/sediment-laden water far
+>   better than `"ndwi"` (green vs NIR). Use it for lakes like Okeechobee.
+> - **`months_from`/`months_to`**: pick the region's **dry/clear season** (Florida:
+>   `01-01`→`04-30`) — fewer clouds → far less year-to-year detection noise.
+> - **`buffer_km=0`** fits the AOI to the geocoder's lake bbox (vs an off-center
+>   buffer box that clips), and **`AFL_S2_MAX_SIZE=1024`** (set on the runner)
+>   reads ~58 m/px instead of 115 m (≈2048 ≈ Landsat-native 30 m).
+>
+> **Ceiling (honest):** optical water indices map **open water**, not emergent
+> marsh. Roughly half of Lake Okeechobee is dense littoral marsh, so even tuned
+> (fitted bbox + 1024 px + dry-season MNDWI) the extent tops out near ~520 km² of
+> its ~1,700 km² — it tracks the gauge's year-to-year trend but is a lower bound
+> on the lake's full footprint. Capturing the marsh too needs land-cover
+> classification or a published lake mask, not index tuning.
+
 ## Run
 
 ```bash
