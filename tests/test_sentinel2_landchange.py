@@ -191,6 +191,34 @@ def test_water_change_method(tools_env):
     assert ch["changed_pixels"] == cc["loss"] + cc["gain"]
 
 
+def test_water_timeseries(tools_env):
+    from _s2_tools import raster, stac, timeseries
+
+    aoi = "-112.50,41.00,-112.30,41.20"
+    years = ["2018", "2020", "2022"]
+    for yr in years:
+        win = (f"{yr}-07-01", f"{yr}-09-30")
+        scenes = stac.search(aoi, *win, use_mock=True)
+        for s in scenes:
+            raster.fetch_scene_index(s["scene_id"], aoi, index="ndwi", use_mock=True)
+        raster.composite(aoi, *win, scene_ids=[s["scene_id"] for s in scenes],
+                         index="ndwi", use_mock=True)
+
+    bundle = timeseries.render_water_timeseries(aoi, index="ndwi", water_threshold=0.0)
+    assert bundle["year_count"] == 3
+    html = Path(bundle["html_path"]).read_text()
+    for yr in years:                       # year tab bar + chart labels
+        assert yr in html
+    assert "maplibre-gl" in html and "chart.js" in html.lower()
+    # geo stack present in CI -> per-year tile pyramids
+    try:
+        import rio_tiler  # noqa: F401
+        tiles = list(Path(bundle["output_dir"], "tiles").rglob("*.png"))
+        assert tiles and any(f"/tiles/2022/" in str(t) for t in tiles)
+    except ImportError:
+        pass
+
+
 def test_unknown_method_rejected(tools_env):
     from _s2_tools import raster, stac
 

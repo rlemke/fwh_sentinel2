@@ -198,6 +198,24 @@ namespace s2.render {
         with Cost(tier = "cheap")
 }
 
+namespace s2.timeseries {
+    /** Render a multi-year surface-water viewer: discover the per-year NDWI
+      * composites in cache, tile each year's water extent, and emit a MapLibre
+      * HTML with a year slider / tab bar + a water-area-over-time chart. So you
+      * scrub the years and watch a lake shrink. `dependency_signal` sequences
+      * this after the ScanYears fan-out that produced the composites. */
+    event facet WaterTimeSeriesMap(
+        aoi: String,
+        index: String = "ndwi",
+        water_threshold: Double = 0.1,
+        title: String = "Surface water over time",
+        basemap_url: String = "",
+        dependency_signal: Long = 0
+    ) => (aoi_key: String, output_dir: String, html_path: String, year_count: Int)
+        with Effect(kind = "io")
+        with Cost(tier = "cheap")
+}
+
 namespace s2.geo {
     /** Resolve a place name to an AOI bbox via the OpenStreetMap Nominatim
       * geocoder. `buffer_km > 0` (default) returns a box of that half-size
@@ -314,6 +332,94 @@ namespace s2.workflows {
                 html_path = run.html_path,
                 aoi = loc.aoi,
                 detail = loc.display_name ++ " [" ++ loc.aoi ++ "] " ++ run.detail
+            )
+        }
+
+    /** One year's water composite: search + per-scene fan-out + median composite
+      * for ``year``'s [months_from, months_to] window. The composite lands in
+      * cache keyed by aoi+index+window so the time-series renderer discovers it. */
+    workflow WaterYear(
+        aoi: String,
+        year: String,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "ndwi",
+        max_cloud: Double = 15.0,
+        collection: String = "sentinel-2-l2a",
+        use_mock: Boolean = false
+    ) => (relative_path: String, scene_count: Int)
+        andThen {
+            search = SearchScenes(
+                aoi = $.aoi,
+                date_from = $.year ++ "-" ++ $.months_from,
+                date_to = $.year ++ "-" ++ $.months_to,
+                max_cloud = $.max_cloud, collection = $.collection, use_mock = $.use_mock
+            )
+            scan = ScanScenes(
+                scene_ids = search.scene_ids, aoi = $.aoi, index = $.index, use_mock = $.use_mock
+            )
+            comp = Composite(
+                aoi = $.aoi,
+                date_from = $.year ++ "-" ++ $.months_from,
+                date_to = $.year ++ "-" ++ $.months_to,
+                scene_ids = search.scene_ids, index = $.index,
+                dependency_signal = scan.count, use_mock = $.use_mock
+            )
+            yield WaterYear(relative_path = comp.relative_path, scene_count = comp.scene_count)
+        }
+
+    /** Fan out WaterYear over a list of years — one parallel branch per year. */
+    workflow ScanYears(
+        aoi: String,
+        years: Json,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "ndwi",
+        max_cloud: Double = 15.0,
+        collection: String = "sentinel-2-l2a",
+        use_mock: Boolean = false
+    ) => (count: Long)
+        andThen foreach yr in $.years {
+            wy = WaterYear(
+                aoi = $.aoi, year = $.yr, months_from = $.months_from, months_to = $.months_to,
+                index = $.index, max_cloud = $.max_cloud, collection = $.collection,
+                use_mock = $.use_mock
+            )
+            yield ScanYears(count = 1)
+        }
+
+    /** Surface-water change over many years for a named place: geocode -> a
+      * water composite per year (ScanYears fan-out) -> a MapLibre viewer with a
+      * year slider/tab bar + a water-area chart. Sentinel-2 covers ~2017+; a
+      * Landsat source would extend this back to the 1980s. */
+    workflow WaterTimeSeries(
+        place: String = "Great Salt Lake, Utah",
+        buffer_km: Double = 20.0,
+        years: Json,
+        months_from: String = "07-01",
+        months_to: String = "09-30",
+        index: String = "ndwi",
+        water_threshold: Double = 0.1,
+        max_cloud: Double = 15.0,
+        collection: String = "sentinel-2-l2a",
+        use_mock: Boolean = false
+    ) => (status: String, html_path: String, aoi: String, year_count: Int)
+        with Author(email = "research@example.com")
+        with Teams(names = ["geo", "research"])
+        andThen {
+            loc = ResolveAOI(place = $.place, buffer_km = $.buffer_km, use_mock = $.use_mock)
+            scanned = ScanYears(
+                aoi = loc.aoi, years = $.years, months_from = $.months_from,
+                months_to = $.months_to, index = $.index, max_cloud = $.max_cloud,
+                collection = $.collection, use_mock = $.use_mock
+            )
+            map = WaterTimeSeriesMap(
+                aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
+                dependency_signal = scanned.count
+            )
+            yield WaterTimeSeries(
+                status = "completed", html_path = map.html_path,
+                aoi = loc.aoi, year_count = map.year_count
             )
         }
 }

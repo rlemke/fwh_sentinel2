@@ -55,6 +55,24 @@ basemap) is method-agnostic. Every scene raster and composite is content-address
 in `$AFL_CACHE_ROOT/s2/`, so changing the threshold/method/epoch re-uses everything
 already fetched.
 
+### Surface water over time (`WaterTimeSeries`)
+
+`s2.workflows.WaterTimeSeries(place, years, index="ndwi", …)` builds one NDWI
+water composite per year (a `ScanYears` fan-out over `WaterYear`) and renders a
+MapLibre viewer with a **year slider / tab bar** + a water-area (km²) line chart —
+scrub the years and watch a lake shrink and recover. Real example (Antelope
+Island, Great Salt Lake): water ≈34 km² (2017) → 28 (2019) → 16 (2021) → **9 km²
+(2022 record low)** → **103 km² (2024)** after the record snowpack refill.
+
+```bash
+scripts/ffl-run "$FFL" --workflow s2.workflows.WaterTimeSeries \
+  --inputs '{"place":"Antelope Island, Utah","buffer_km":12,"years":["2017","2019","2021","2022","2024"],"index":"ndwi","water_threshold":0.1,"use_mock":false}' --task-list s2
+```
+
+> **Range note.** Sentinel-2 starts ~2017. A true 20-year span needs a Landsat
+> source (1984+); Landsat on AWS is requester-pays and the free Planetary
+> Computer copy needs URL signing — a drop-in `s2.source` sibling, not yet wired.
+
 ## Run
 
 ```bash

@@ -13,11 +13,13 @@ def register_all_handlers(poller) -> None:
     from .geo.geo_handlers import register_geo_handlers
     from .render.render_handlers import register_render_handlers
     from .source.source_handlers import register_source_handlers
+    from .timeseries.timeseries_handlers import register_timeseries_handlers
 
     register_geo_handlers(poller)
     register_source_handlers(poller)
     register_analyze_handlers(poller)
     register_render_handlers(poller)
+    register_timeseries_handlers(poller)
 
 
 def register_all_registry_handlers(runner) -> None:
@@ -26,8 +28,10 @@ def register_all_registry_handlers(runner) -> None:
     from .geo.geo_handlers import register_handlers as reg_geo
     from .render.render_handlers import register_handlers as reg_render
     from .source.source_handlers import register_handlers as reg_source
+    from .timeseries.timeseries_handlers import register_handlers as reg_ts
 
     reg_geo(runner)
     reg_source(runner)
     reg_analyze(runner)
     reg_render(runner)
+    reg_ts(runner)
