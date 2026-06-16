@@ -210,6 +210,8 @@ namespace s2.timeseries {
         water_threshold: Double = 0.1,
         title: String = "Surface water over time",
         basemap_url: String = "",
+        months_from: String = "",
+        months_to: String = "",
         level_relative_path: String = "",
         dependency_signal: Long = 0
     ) => (aoi_key: String, output_dir: String, html_path: String, year_count: Int)
@@ -471,6 +473,7 @@ namespace s2.workflows {
             )
             map = WaterTimeSeriesMap(
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
+                months_from = $.months_from, months_to = $.months_to,
                 dependency_signal = scanned.count
             )
             yield WaterTimeSeries(
@@ -522,6 +525,7 @@ namespace s2.workflows {
             map = WaterTimeSeriesMap(
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
                 title = "Lake water: level vs. extent",
+                months_from = $.months_from, months_to = $.months_to,
                 level_relative_path = level.relative_path,
                 dependency_signal = scanned.count
             )

@@ -37,24 +37,37 @@ def _area_km2(bounds, shape, n_px: int) -> float:
 def render_water_timeseries(
     aoi: str, *, index: str = "ndwi", water_threshold: float = 0.1,
     title: str = "Surface water over time", basemap_url: str = "",
+    months_from: str = "", months_to: str = "",
     level: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Render the per-year water-extent viewer. If ``level`` (a cached USGS
     elevation series, see ``level.fetch_lake_level``) is supplied, the chart
     gains a second axis overlaying lake *height* (gauge) on water *footprint*
-    (satellite) — they track, non-linearly."""
+    (satellite) — they track, non-linearly.
+
+    ``months_from``/``months_to`` select a specific seasonal window when the same
+    AOI+index cache holds composites for more than one window (e.g. a summer and a
+    dry-season run); without them the most recent window per year is used."""
     ak = raster.aoi_key(aoi)
     # Discover per-year composites: COMPOSITE/<ak>/<index>/<YYYY>-..._<YYYY>-....npz
     rels = [r for r in sidecar.list_entries(raster.COMPOSITE) if r.startswith(f"{ak}/{index}/")]
+    # When a window is given, accept only that window's file per year, so a
+    # dry-season run never silently renders a stale summer composite.
     by_year: dict[str, str] = {}
-    for r in rels:
+    for r in sorted(rels):
         fn = r.rsplit("/", 1)[-1]
         yr = fn[:4]
-        if yr.isdigit():
-            by_year[yr] = r  # one composite per year window
+        if not yr.isdigit():
+            continue
+        if months_from and months_to and fn != f"{yr}-{months_from}_{yr}-{months_to}.npz":
+            continue
+        by_year[yr] = r  # one composite per year window
     years = sorted(by_year)
     if not years:
-        raise FileNotFoundError(f"no per-year composites for aoi={ak} index={index}; run ScanYears")
+        raise FileNotFoundError(
+            f"no per-year composites for aoi={ak} index={index}"
+            + (f" window {months_from}.._{months_to}" if months_from else "")
+            + "; run ScanYears")
 
     out_dir = storage.join(storage.output_root(), "s2-timeseries", ak)
     tiles_root = storage.join(out_dir, "tiles")

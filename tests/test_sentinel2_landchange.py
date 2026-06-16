@@ -301,6 +301,35 @@ def test_real_gauge_lookup_live(tools_env):
         level.find_lake_gauge("-114.95,35.9,-114.3,36.6", place="Lake Mead")
 
 
+def test_timeseries_window_selection(tools_env):
+    """When the same AOI+index cache holds two seasonal windows for a year, the
+    renderer selects the one it's asked for (no silent stale-composite reuse)."""
+    import json
+    import re
+
+    from _s2_tools import raster, stac, timeseries
+
+    aoi, yr = "-81,26,-80,27", "2020"
+    for mf, mt in [("07-01", "09-30"), ("01-01", "04-30")]:
+        scenes = stac.search(aoi, f"{yr}-{mf}", f"{yr}-{mt}", use_mock=True)
+        ids = [s["scene_id"] for s in scenes]
+        for sid in ids:
+            raster.fetch_scene_index(sid, aoi, index="mndwi", use_mock=True)
+        raster.composite(aoi, f"{yr}-{mf}", f"{yr}-{mt}", scene_ids=ids,
+                         index="mndwi", use_mock=True)
+
+    def area_of(bundle):
+        h = Path(bundle["html_path"]).read_text()
+        cfg = json.loads(re.search(r"var cfg=(\{.*?\}), S=cfg\.series", h, re.S).group(1))
+        return cfg["series"][0]["area_km2"]
+
+    dry = area_of(timeseries.render_water_timeseries(
+        aoi, index="mndwi", water_threshold=0.0, months_from="01-01", months_to="04-30"))
+    summer = area_of(timeseries.render_water_timeseries(
+        aoi, index="mndwi", water_threshold=0.0, months_from="07-01", months_to="09-30"))
+    assert dry != summer  # the two windows resolve to different composites
+
+
 def test_unknown_method_rejected(tools_env):
     from _s2_tools import raster, stac
 

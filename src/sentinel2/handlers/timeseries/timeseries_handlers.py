@@ -26,6 +26,8 @@ def handle_water_timeseries_map(params: dict[str, Any]) -> dict[str, Any]:
         water_threshold=float(params.get("water_threshold", 0.1)),
         title=params.get("title", "Surface water over time"),
         basemap_url=params.get("basemap_url", ""),
+        months_from=params.get("months_from", ""),
+        months_to=params.get("months_to", ""),
         level=level_series,
     )
 
