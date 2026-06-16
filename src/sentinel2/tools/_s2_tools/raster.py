@@ -17,6 +17,7 @@ per-scene arrays stack cleanly and the two epoch composites align pixel-for-pixe
 from __future__ import annotations
 
 import io
+import os
 from typing import Any
 
 import numpy as np
@@ -38,7 +39,10 @@ _BANDS = {
 }
 
 # Longest output edge for a real COG read (keeps tiles small + scenes aligned).
-MAX_SIZE = 512
+# Fixed per AOI so the per-scene→composite→change chain stacks consistently;
+# raise it (via AFL_S2_MAX_SIZE) for large lakes — 30 m Landsat native is ~2048
+# over a ~60 km box. Read at import, so it's one grid size per runner process.
+MAX_SIZE = int(os.environ.get("AFL_S2_MAX_SIZE", "512"))
 
 
 def aoi_key(aoi: str) -> str:
