@@ -176,8 +176,10 @@ def detect_change(
         change, class_counts, source = _classify_change(base, recent)
     elif method == "difference":
         change, class_counts, source = _difference_change(base, recent, threshold)
+    elif method == "water":
+        change, class_counts, source = _water_change(base, recent, threshold)
     else:
-        raise ValueError(f"unknown method {method!r} (expected 'difference' or 'classify')")
+        raise ValueError(f"unknown method {method!r} (expected difference/classify/water)")
 
     loss = int((change == -1).sum())
     gain = int((change == 1).sum())
@@ -191,6 +193,33 @@ def detect_change(
         "class_counts": class_counts,
         "size_bytes": meta["size_bytes"], "sha256": meta["sha256"],
     }
+
+
+def _water_change(base, recent, water_cutoff):
+    """Surface-water change for a *water* index (use index='ndwi').
+
+    Threshold each epoch into a water mask (index > ``water_cutoff``), then report
+    the per-pixel transition: water→land = receded (loss, -1), land→water =
+    flooded (gain, +1). ``class_counts`` carries the water-pixel counts per epoch
+    and the net water-area change %, so a receding lake reads directly.
+    """
+    bw = base > water_cutoff
+    rw = recent > water_cutoff
+    change = np.zeros(base.shape, dtype="int8")
+    change[bw & ~rw] = -1
+    change[~bw & rw] = 1
+    base_water = int(bw.sum())
+    recent_water = int(rw.sum())
+    counts = {
+        "loss": int((change == -1).sum()),
+        "gain": int((change == 1).sum()),
+        "stable": int((change == 0).sum()),
+        "baseline_water": base_water,
+        "recent_water": recent_water,
+        "water_change_pct": round(100.0 * (recent_water - base_water) / base_water, 2)
+        if base_water else 0.0,
+    }
+    return change, counts, f"water(ndwi>{water_cutoff})"
 
 
 def _difference_change(base, recent, threshold):

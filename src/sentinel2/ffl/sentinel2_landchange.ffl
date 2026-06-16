@@ -148,7 +148,12 @@ namespace s2.analyze {
       *     class transition; `class_counts` carries the per-class histograms and
       *     the from->to transition matrix. (Threshold classifier over a veg index;
       *     a trained random-forest over the full spectral stack is the upgrade.)
-      * The change raster is loss(-1)/stable(0)/gain(+1) either way, so the
+      *   - "water"      — for a water index (use index="ndwi"): threshold each
+      *     epoch into a water mask (index > threshold) and report the transition —
+      *     water->land = receded (loss), land->water = flooded (gain).
+      *     `class_counts` carries per-epoch water-pixel counts + the net
+      *     water-area change %, so a receding lake reads directly.
+      * The change raster is loss(-1)/stable(0)/gain(+1) for every method, so the
       * renderer is method-agnostic. */
     event facet DetectChange(
         baseline_path: String,

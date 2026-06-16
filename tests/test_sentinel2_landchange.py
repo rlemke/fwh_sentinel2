@@ -167,6 +167,30 @@ def test_classify_change_method(tools_env):
     assert sum(cc["transitions"].values()) == ch["changed_pixels"]
 
 
+def test_water_change_method(tools_env):
+    from _s2_tools import raster, stac
+
+    aoi = "-112.50,41.00,-112.30,41.20"
+    ids = {}
+    for win in (("2019-07-01", "2019-09-30"), ("2024-07-01", "2024-09-30")):
+        scenes = stac.search(aoi, *win, use_mock=True)
+        ids[win[0]] = [s["scene_id"] for s in scenes]
+        for s in scenes:
+            raster.fetch_scene_index(s["scene_id"], aoi, index="ndwi", use_mock=True)
+    base = raster.composite(aoi, "2019-07-01", "2019-09-30", scene_ids=ids["2019-07-01"],
+                            index="ndwi", use_mock=True)
+    recent = raster.composite(aoi, "2024-07-01", "2024-09-30", scene_ids=ids["2024-07-01"],
+                              index="ndwi", use_mock=True)
+    ch = raster.detect_change(base["relative_path"], recent["relative_path"], base["aoi_key"],
+                              method="water", threshold=0.0, use_mock=True)
+    assert ch["method"] == "water"
+    cc = ch["class_counts"]
+    assert {"baseline_water", "recent_water", "water_change_pct"} <= set(cc)
+    assert isinstance(cc["water_change_pct"], (int, float))
+    # loss = pixels that went water -> land (receded)
+    assert ch["changed_pixels"] == cc["loss"] + cc["gain"]
+
+
 def test_unknown_method_rejected(tools_env):
     from _s2_tools import raster, stac
 
