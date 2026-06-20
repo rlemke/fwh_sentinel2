@@ -2,11 +2,11 @@
 detect land-cover change from Sentinel-2 imagery between two time windows over
 an area of interest and render the result as a tiled MapLibre map.
 
-Discovered by the Facetwork runner via the ``facetwork.examples`` entry point
+Discovered by the Facetwork runner via the ``facetwork.domains`` entry point
 declared in ``pyproject.toml``::
 
-    [project.entry-points."facetwork.examples"]
-    sentinel2-landchange = "sentinel2:example"
+    [project.entry-points."facetwork.domains"]
+    sentinel2-landchange = "sentinel2:domain"
 
 Once ``pip install -e .`` has been run from this repository, Facetwork's
 ``scripts/start-runner --example sentinel2-landchange`` and
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from facetwork.examples import ExamplePackage
+from facetwork.domains import DomainPackage
 
 from .handlers import register_all_registry_handlers
 
@@ -29,7 +29,7 @@ _RUNNER_ENV = {
     "AFL_STUCK_TIMEOUT_MS": "3600000",
 }
 
-example = ExamplePackage(
+domain = DomainPackage(
     name="sentinel2-landchange",
     ffl_dir=Path(__file__).parent / "ffl",
     register_handlers=register_all_registry_handlers,

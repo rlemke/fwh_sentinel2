@@ -40,8 +40,8 @@ dev = [
 [project.urls]
 Repository = "https://github.com/rlemke/fwh_sentinel2"
 
-[project.entry-points."facetwork.examples"]
-sentinel2-landchange = "sentinel2:example"
+[project.entry-points."facetwork.domains"]
+sentinel2-landchange = "sentinel2:domain"
 
 [tool.setuptools.packages.find]
 where = ["src"]
