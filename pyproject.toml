@@ -15,6 +15,7 @@ keywords = ["facetwork", "ffl", "sentinel-2", "stac", "cog", "ndvi", "land-cover
 dependencies = [
     "facetwork>=0.31.0",
     "numpy>=1.24",
+    "PyYAML>=6.0",   # load the composability manifest (catalog.yaml)
 ]
 
 [project.optional-dependencies]
@@ -49,6 +50,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 sentinel2 = [
     "ffl/*.ffl",
+    "catalog.yaml",
 ]
 
 [tool.ruff]

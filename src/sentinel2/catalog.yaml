@@ -1,0 +1,306 @@
+# Composability manifest for the sentinel2-landchange package.
+#
+# Machine-readable index so an LLM can DISCOVER + REUSE these capabilities by
+# intent, the same way the platform's `fw_catalog_match` (workflow-level,
+# reuse-first) and `fw_capabilities` (facet-level capability index) tools work.
+#
+#   * `workflows` — entry-point workflows, each with a natural-language `summary`
+#     (the kind of request it answers), `tags`, and a `param_schema` of the key
+#     parameters. Use these for reuse-first catalog matching: match an NL request
+#     against the summaries/tags before authoring anything new.
+#   * `facets` — a capability index of the core composable primitives by
+#     namespace, with `purpose`, `signature`, and the `effect`/`cost` taken
+#     verbatim from the `with Effect(...) / with Cost(...)` mixins in the FFL.
+#     Compose pipelines from these; prefer pure/cheap primitives.
+#
+# Accurate qualified names + signatures are sourced from
+# `ffl/sentinel2_landchange.ffl`; see `sentinel2.catalog.load_manifest()`.
+
+version: 1
+package: sentinel2-landchange
+
+workflows:
+  # --- Land-cover change (the canonical entry points) -------------------------
+  - qualified_name: s2.workflows.AnalyzeRegion
+    summary: >-
+      Land-cover change for a named place: geocode the name to an AOI bbox, then
+      run the full Sentinel-2 pipeline (STAC search -> per-scene fan-out ->
+      median composite per epoch -> change detection -> MapLibre map). The
+      preferred entry point for "show forest loss / land-cover change in
+      <place>" (e.g. Apuí, Amazonas). use_mock=true runs the whole chain
+      offline.
+    tags: [land-cover-change, deforestation, sentinel-2, ndvi, geocode, map, change-detection]
+    entry_point: true
+    param_schema:
+      place: String
+      buffer_km: Double
+      baseline_from: String
+      baseline_to: String
+      recent_from: String
+      recent_to: String
+      index: String
+      max_cloud: Double
+      method: String
+      threshold: Double
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.AnalyzeAOI
+    summary: >-
+      End-to-end land-cover change for one explicit AOI bbox between a baseline
+      and a recent date window: STAC search + per-scene fan-out + median
+      composite per epoch, then detect change and render the map. Use when you
+      already have a "min_lon,min_lat,max_lon,max_lat" box; use AnalyzeRegion to
+      start from a place name.
+    tags: [land-cover-change, sentinel-2, ndvi, aoi, bbox, change-detection, map]
+    entry_point: true
+    param_schema:
+      aoi: String
+      baseline_from: String
+      baseline_to: String
+      recent_from: String
+      recent_to: String
+      index: String
+      max_cloud: Double
+      method: String
+      threshold: Double
+      use_mock: Boolean
+
+  # --- Surface-water / reservoir time series ---------------------------------
+  - qualified_name: s2.workflows.WaterTimeSeries
+    summary: >-
+      Surface-water change over many years for a named place: geocode -> a water
+      (NDWI) composite per year (parallel fan-out) -> a MapLibre viewer with a
+      year slider/tab bar + a water-area-over-time chart. Watch a lake shrink or
+      a reservoir fill across years.
+    tags: [surface-water, ndwi, time-series, lake, reservoir, drought, map, fanout]
+    entry_point: true
+    param_schema:
+      place: String
+      buffer_km: Double
+      years: Json
+      months_from: String
+      months_to: String
+      index: String
+      water_threshold: Double
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.WaterLevelTimeSeries
+    summary: >-
+      Like WaterTimeSeries, but also fetches the lake's USGS gauge elevation
+      (water *level*) for the period and overlays it on the chart — surface
+      height and water footprint on one timeline. US gauges only; default = the
+      Great Salt Lake south-arm gauge.
+    tags: [surface-water, ndwi, time-series, lake-level, usgs-gauge, drought, map]
+    entry_point: true
+    param_schema:
+      place: String
+      buffer_km: Double
+      site_id: String
+      date_from: String
+      date_to: String
+      years: Json
+      index: String
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.WaterStorageTimeSeries
+    summary: >-
+      Like WaterLevelTimeSeries, but overlays reservoir *storage* (USGS param
+      00054, acre-feet) — the actual quantity of water over time, against the
+      satellite footprint. Discovers a storage-reporting LK gauge by name. Works
+      for USGS-gauged reservoirs (Army-Corps / state lakes).
+    tags: [reservoir, storage, ndwi, mndwi, time-series, usgs-gauge, drought, map]
+    entry_point: true
+    param_schema:
+      place: String
+      buffer_km: Double
+      site_id: String
+      date_from: String
+      date_to: String
+      years: Json
+      index: String
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.ReservoirStorageUSBR
+    summary: >-
+      Reservoir storage (acre-feet) vs. extent for a Bureau-of-Reclamation
+      reservoir USGS doesn't gauge — Lake Powell or Lake Mead. The quantity
+      comes from USBR, not USGS, so there's no gauge-discovery step. Shows the
+      Colorado-River megadrought.
+    tags: [reservoir, storage, usbr, lake-powell, lake-mead, colorado-river, drought, map]
+    entry_point: true
+    param_schema:
+      place: String
+      buffer_km: Double
+      date_from: String
+      date_to: String
+      years: Json
+      index: String
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+  # --- Fan-out building blocks -----------------------------------------------
+  - qualified_name: s2.scan.ScanScenes
+    summary: >-
+      Fan-out building block: fan out per-scene index extraction over a scene-id
+      list — one parallel runtime step per scene, each landing its AOI-clipped
+      single-band raster in the shared cache for a downstream composite to
+      reduce. Feed scene_ids from s2.source.SearchScenes.
+    tags: [fanout, scenes, building-block, parallel, raster]
+    entry_point: true
+    param_schema:
+      scene_ids: Json
+      aoi: String
+      index: String
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.WaterYear
+    summary: >-
+      Building block: one year's water composite — search + per-scene fan-out +
+      median composite for a year's seasonal window. The composite lands in
+      cache keyed by aoi+index+window for the time-series renderer to discover.
+    tags: [surface-water, ndwi, single-year, composite, building-block]
+    entry_point: true
+    param_schema:
+      aoi: String
+      year: String
+      months_from: String
+      months_to: String
+      index: String
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+  - qualified_name: s2.workflows.ScanYears
+    summary: >-
+      Building block: fan out WaterYear over a list of years — one parallel
+      branch per year, producing the per-year water composites the time-series
+      viewers consume.
+    tags: [surface-water, fanout, years, building-block, parallel, composite]
+    entry_point: true
+    param_schema:
+      aoi: String
+      years: Json
+      months_from: String
+      months_to: String
+      index: String
+      max_cloud: Double
+      collection: String
+      use_mock: Boolean
+
+facets:
+  # --- s2.source : STAC search + COG read (source adapter) --------------------
+  - qualified_name: s2.source.SearchScenes
+    namespace: s2.source
+    purpose: >-
+      Search a STAC catalog for Sentinel-2 L2A scenes intersecting the AOI within
+      a date window under a cloud ceiling; returns the count plus a Json array of
+      scene ids to fan out over.
+    signature: "SearchScenes(aoi: String, date_from: String, date_to: String, max_cloud: Double = 20.0, collection: String = \"sentinel-2-l2a\", stac_url: String = \"\", exclude_platforms: String = \"\", use_mock: Boolean = false) => (count: Int, scene_ids: Json)"
+    effect: external
+    cost: moderate
+
+  - qualified_name: s2.source.FetchSceneIndex
+    namespace: s2.source
+    purpose: >-
+      Window-read the bands for one scene (COG range requests), compute the
+      spectral index, and cache the AOI-clipped single-band raster keyed by
+      aoi+index+scene. Idempotent (a cache hit returns was_cached=true).
+    signature: "FetchSceneIndex(scene_id: String, aoi: String, index: String = \"ndvi\", force: Boolean = false, use_mock: Boolean = false) => (cache_type: String, relative_path: String, aoi_key: String, index: String, scene_count: Int, width: Int, height: Int, size_bytes: Int, sha256: String, was_cached: Boolean, used_mock: Boolean)"
+    effect: external
+    cost: moderate
+
+  # --- s2.analyze : index composite + change detection (pure) -----------------
+  - qualified_name: s2.analyze.Composite
+    namespace: s2.analyze
+    purpose: >-
+      Reduce the cached per-scene index rasters for an AOI + date window into a
+      single cloud-robust composite (median by default).
+    signature: "Composite(aoi: String, date_from: String, date_to: String, scene_ids: Json, index: String = \"ndvi\", reducer: String = \"median\", dependency_signal: Long = 0, use_mock: Boolean = false) => (cache_type: String, relative_path: String, aoi_key: String, index: String, scene_count: Int, width: Int, height: Int, size_bytes: Int, sha256: String, was_cached: Boolean, used_mock: Boolean)"
+    effect: pure
+    cost: moderate
+
+  - qualified_name: s2.analyze.DetectChange
+    namespace: s2.analyze
+    purpose: >-
+      Compare a baseline composite to a recent composite and emit a change raster
+      (loss/-1, stable/0, gain/+1) + summary stats. Methods: difference,
+      classify (land-cover transition), water (water-mask transition).
+    signature: "DetectChange(baseline_path: String, recent_path: String, aoi_key: String, method: String = \"difference\", threshold: Double = 0.15, use_mock: Boolean = false) => (relative_path: String, aoi_key: String, method: String, changed_pixels: Int, total_pixels: Int, pct_loss: Double, pct_gain: Double, class_counts: Json, size_bytes: Int, sha256: String)"
+    effect: pure
+    cost: cheap
+
+  # --- s2.render / s2.timeseries : MapLibre tiling + viewers (io) -------------
+  - qualified_name: s2.render.ChangeMap
+    namespace: s2.render
+    purpose: >-
+      Render the change raster as web tiles + a MapLibre HTML viewer (loss in
+      red, gain in green, over a basemap).
+    signature: "ChangeMap(change_path: String, aoi_key: String, title: String = \"Sentinel-2 land-cover change\", basemap_url: String = \"\", dependency_signal: Int = 0) => (aoi_key: String, output_dir: String, html_path: String, tiles_path: String)"
+    effect: io
+    cost: cheap
+
+  - qualified_name: s2.timeseries.WaterTimeSeriesMap
+    namespace: s2.timeseries
+    purpose: >-
+      Render a multi-year surface-water viewer: tile each year's water extent and
+      emit a MapLibre HTML with a year slider / tab bar + a water-area-over-time
+      chart, optionally overlaying a gauge level/storage series.
+    signature: "WaterTimeSeriesMap(aoi: String, index: String = \"ndwi\", water_threshold: Double = 0.1, title: String = \"Surface water over time\", basemap_url: String = \"\", months_from: String = \"\", months_to: String = \"\", level_relative_path: String = \"\", dependency_signal: Long = 0) => (aoi_key: String, output_dir: String, html_path: String, year_count: Int)"
+    effect: io
+    cost: cheap
+
+  # --- s2.geo : place -> AOI bbox (external geocode) --------------------------
+  - qualified_name: s2.geo.ResolveAOI
+    namespace: s2.geo
+    purpose: >-
+      Resolve a place name to an AOI bbox via the OpenStreetMap Nominatim
+      geocoder; buffer_km>0 returns a box of that half-size centered on the
+      place, else the geocoder's own bounding box.
+    signature: "ResolveAOI(place: String, buffer_km: Double = 10.0, nominatim_url: String = \"https://nominatim.openstreetmap.org\", use_mock: Boolean = false) => (aoi: String, lat: Double, lon: Double, display_name: String, used_mock: Boolean)"
+    effect: external
+    cost: cheap
+
+  # --- s2.level : gauge/reservoir series (external) ---------------------------
+  - qualified_name: s2.level.FetchLakeLevel
+    namespace: s2.level
+    purpose: >-
+      Daily lake-surface elevation (water level) from the USGS NWIS Daily Values
+      service. US gauges only; default = Great Salt Lake at Saltair Boat Harbor.
+    signature: "FetchLakeLevel(site_id: String = \"10010000\", date_from: String, date_to: String, param: String = \"62614\", use_mock: Boolean = false) => (relative_path: String, site_name: String, unit: String, point_count: Int, min: Double, max: Double)"
+    effect: external
+    cost: cheap
+
+  - qualified_name: s2.level.ResolveLakeGauge
+    namespace: s2.level
+    purpose: >-
+      Find the best USGS lake-elevation gauge for an AOI so any US lake works
+      without a hardcoded site; discovers LK-type gauges in the AOI bbox and
+      picks the one best matching the place name.
+    signature: "ResolveLakeGauge(aoi: String, place: String = \"\", site_id: String = \"\", margin_deg: Double = 0.1, params: String = \"\", use_mock: Boolean = false) => (site_id: String, param: String, site_name: String, lat: Double, lon: Double, distance_km: Double, confident: Boolean, candidate_count: Int, source: String)"
+    effect: external
+    cost: cheap
+
+  - qualified_name: s2.level.FetchReservoirStorage
+    namespace: s2.level
+    purpose: >-
+      Daily reservoir storage (USGS param 00054, acre-feet) — the quantity of
+      water, not its height. Same cached series shape as FetchLakeLevel.
+    signature: "FetchReservoirStorage(site_id: String, date_from: String, date_to: String, use_mock: Boolean = false) => (relative_path: String, site_name: String, unit: String, point_count: Int, min: Double, max: Double)"
+    effect: external
+    cost: cheap
+
+  - qualified_name: s2.level.FetchUSBRStorage
+    namespace: s2.level
+    purpose: >-
+      Reservoir storage (or elevation) for a Bureau-of-Reclamation reservoir USGS
+      doesn't gauge — Lake Powell (UC hydrodata) and Lake Mead (RISE API).
+    signature: "FetchUSBRStorage(reservoir: String, date_from: String, date_to: String, metric: String = \"storage\", use_mock: Boolean = false) => (relative_path: String, site_name: String, unit: String, point_count: Int, min: Double, max: Double)"
+    effect: external
+    cost: cheap
