@@ -41,9 +41,9 @@ _BANDS = {
 
 # Longest output edge for a real COG read (keeps tiles small + scenes aligned).
 # Fixed per AOI so the per-scene→composite→change chain stacks consistently;
-# raise it (via AFL_S2_MAX_SIZE) for large lakes — 30 m Landsat native is ~2048
+# raise it (via FW_S2_MAX_SIZE) for large lakes — 30 m Landsat native is ~2048
 # over a ~60 km box. Read at import, so it's one grid size per runner process.
-MAX_SIZE = int(os.environ.get("AFL_S2_MAX_SIZE", "512"))
+MAX_SIZE = int(os.environ.get("FW_S2_MAX_SIZE", "512"))
 
 
 def _grid_size(bbox, max_size: int) -> tuple[int, int]:

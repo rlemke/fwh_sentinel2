@@ -25,8 +25,8 @@ from .handlers import register_all_registry_handlers
 # COG window-reads + compositing are blocking I/O; prefer the global execution
 # timeout over per-step heartbeats for the fetch/composite facets.
 _RUNNER_ENV = {
-    "AFL_TASK_EXECUTION_TIMEOUT_MS": "1800000",
-    "AFL_STUCK_TIMEOUT_MS": "3600000",
+    "FW_TASK_EXECUTION_TIMEOUT_MS": "1800000",
+    "FW_STUCK_TIMEOUT_MS": "3600000",
 }
 
 domain = DomainPackage(

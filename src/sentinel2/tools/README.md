@@ -1,7 +1,7 @@
 # sentinel2-landchange tools
 
 CLI surface over `_s2_tools/` — the same functions the FFL handlers call, so the
-terminal and the runtime share one cache (`$AFL_CACHE_ROOT/s2/`) and one code path.
+terminal and the runtime share one cache (`$FW_CACHE_ROOT/s2/`) and one code path.
 
 ```
 search_scenes.py   STAC search → {count, scene_ids}              [shipped]

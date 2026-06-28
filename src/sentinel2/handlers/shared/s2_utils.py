@@ -2,7 +2,7 @@
 
 The real implementation lives in ``tools/_s2_tools/`` (inside this example). It
 is shared verbatim by the CLI tools (``tools/``) and the FFL handlers — both
-read/write the same cache under ``$AFL_CACHE_ROOT/s2/``.
+read/write the same cache under ``$FW_CACHE_ROOT/s2/``.
 
 ``parents[2]`` is the example root (``sentinel2-landchange/``); ``/ "tools"``
 reaches the bundled tool library so ``from _s2_tools import ...`` resolves

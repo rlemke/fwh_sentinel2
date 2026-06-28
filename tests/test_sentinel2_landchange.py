@@ -5,7 +5,7 @@ workflows/facets; (2) the offline mock chain (search -> per-scene index ->
 composite x2 -> change -> render) runs end-to-end with coherent stats + an HTML
 map; (3) the classify method's land-cover transitions; (4) handler dispatch.
 
-All cache/output writes go to a tmp dir via AFL_CACHE_ROOT/AFL_DATA_ROOT, so the
+All cache/output writes go to a tmp dir via FW_CACHE_ROOT/FW_DATA_ROOT, so the
 default suite needs no network, GDAL, or external storage. A live STAC test is
 opt-in (S2_LIVE=1).
 """
@@ -81,9 +81,9 @@ def test_resolve_aoi_handler(tools_env):
 
 @pytest.fixture
 def tools_env(tmp_path, monkeypatch):
-    monkeypatch.setenv("AFL_DATA_ROOT", str(tmp_path))
-    monkeypatch.setenv("AFL_CACHE_ROOT", str(tmp_path / "cache"))
-    monkeypatch.setenv("AFL_OUTPUT_BASE", str(tmp_path / "output"))
+    monkeypatch.setenv("FW_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("FW_CACHE_ROOT", str(tmp_path / "cache"))
+    monkeypatch.setenv("FW_OUTPUT_BASE", str(tmp_path / "output"))
     if str(_TOOLS) not in sys.path:
         sys.path.insert(0, str(_TOOLS))
     for mod in [m for m in sys.modules if m == "_s2_tools" or m.startswith("_s2_tools.")]:

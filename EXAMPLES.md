@@ -55,7 +55,7 @@ scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
 
 Gauge `02276400` (ft NGVD29). Needs the turbid-water tuning: **`mndwi`** (green vs
 SWIR) for sediment-laden water, a **dry-season window** (Florida: Jan–Apr) to cut
-clouds, **`buffer_km=0`** to fit the AOI, and `AFL_S2_MAX_SIZE=1024` on the runner
+clouds, **`buffer_km=0`** to fit the AOI, and `FW_S2_MAX_SIZE=1024` on the runner
 for ~58 m/px. **Ceiling:** ~half the lake is emergent **marsh** that no optical
 water index counts as water, so extent tops out near ~520 of ~1,700 km² — a lower
 bound that tracks the gauge trend, not the full footprint.
@@ -81,7 +81,7 @@ so here the *gauge* is the meaningful signal and extent correctly doesn't move.
 ### 4. Lake Powell, Utah/Arizona — canyon reservoir, the drought recession
 
 ```bash
-# AFL_S2_MAX_SIZE=1024 on the runner (large AOI). ~141 reads — a long run.
+# FW_S2_MAX_SIZE=1024 on the runner (large AOI). ~141 reads — a long run.
 scripts/ffl-run "$FFL" --workflow s2.workflows.WaterLevelTimeSeries \
   --inputs '{"place":"Lake Powell, Utah","buffer_km":0,"years":["2004","2009","2014","2019","2022","2024"],
              "collection":"landsat-c2-l2","index":"ndwi","water_threshold":0.0,"max_cloud":20,
@@ -132,7 +132,7 @@ or a USBR feed for those.
 
 **Extent-tuning levers** (no code change except the resolution env): `index`
 (`mndwi` for turbid), `months_from`/`months_to` (region's clear season),
-`buffer_km=0` (fit AOI), `AFL_S2_MAX_SIZE` (resolution), `exclude_platforms`
+`buffer_km=0` (fit AOI), `FW_S2_MAX_SIZE` (resolution), `exclude_platforms`
 (drop Landsat-7 striping). Beyond these, optical water indices map **open water,
 not marsh or bloom-covered water** — the full footprint of such lakes needs
 land-cover classification or a published lake mask, not index tuning.

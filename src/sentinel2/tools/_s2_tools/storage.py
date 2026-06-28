@@ -1,6 +1,6 @@
 """Storage for the s2 tools — local filesystem or S3/MinIO.
 
-One backend, selected by ``AFL_STORAGE`` (``local`` default, or ``s3``). All
+One backend, selected by ``FW_STORAGE`` (``local`` default, or ``s3``). All
 file I/O in ``_s2_tools`` (the sidecar cache + the rendered map bundle) goes
 through ``read_bytes`` / ``write_bytes`` / ``exists`` / ``list_files`` here, so
 the same code path produces a local tree or S3 objects. On ``s3`` the cache lands
@@ -8,7 +8,7 @@ at ``s3://<bucket>/cache/s2/…`` and the map bundle at ``s3://<bucket>/output/s
 (which the dashboard's /output/raw artifact server can serve).
 
 Conforms to agent-spec/cache-layout. S3 needs ``boto3`` (``pip install -e ".[s3]"``)
-and the standard ``AFL_S3_*`` env (endpoint/creds), exactly like the runtime.
+and the standard ``FW_S3_*`` env (endpoint/creds), exactly like the runtime.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ S3_DEFAULT_ROOT = "s3://afl-cache"
 
 
 def backend() -> str:
-    return (os.environ.get("AFL_STORAGE") or "local").lower()
+    return (os.environ.get("FW_STORAGE") or "local").lower()
 
 
 def is_s3(path: str) -> bool:
@@ -32,30 +32,30 @@ def is_s3(path: str) -> bool:
 
 
 def data_root() -> str:
-    env = os.environ.get("AFL_DATA_ROOT")
+    env = os.environ.get("FW_DATA_ROOT")
     if env:
         return env
     return S3_DEFAULT_ROOT if backend() == "s3" else LOCAL_DEFAULT_ROOT
 
 
 def cache_root() -> str:
-    return os.environ.get("AFL_CACHE_ROOT") or join(data_root(), "cache")
+    return os.environ.get("FW_CACHE_ROOT") or join(data_root(), "cache")
 
 
 def output_root() -> str:
     """Where the rendered map bundle is written.
 
     On ``s3`` the bundle goes to the object store so the dashboard can serve it;
-    ``AFL_OUTPUT_BASE`` is honored only when it is itself an ``s3://`` URI (it is
+    ``FW_OUTPUT_BASE`` is honored only when it is itself an ``s3://`` URI (it is
     often a *local* scratch dir under the runtime's staging model). On ``local``
-    it's ``AFL_OUTPUT_BASE`` or ``<data_root>/output``.
+    it's ``FW_OUTPUT_BASE`` or ``<data_root>/output``.
     """
     if backend() == "s3":
-        ob = os.environ.get("AFL_S2_OUTPUT_BASE") or os.environ.get("AFL_OUTPUT_BASE")
+        ob = os.environ.get("FW_S2_OUTPUT_BASE") or os.environ.get("FW_OUTPUT_BASE")
         if ob and is_s3(ob):
             return ob
         return join(data_root(), "output")
-    return os.environ.get("AFL_OUTPUT_BASE") or join(data_root(), "output")
+    return os.environ.get("FW_OUTPUT_BASE") or join(data_root(), "output")
 
 
 def join(*parts: str) -> str:
@@ -77,11 +77,11 @@ def _s3():
 
     return boto3.client(
         "s3",
-        endpoint_url=os.environ.get("AFL_S3_ENDPOINT") or None,
-        region_name=os.environ.get("AFL_S3_REGION", "us-east-1"),
-        aws_access_key_id=os.environ.get("AFL_S3_ACCESS_KEY") or os.environ.get("AWS_ACCESS_KEY_ID"),
+        endpoint_url=os.environ.get("FW_S3_ENDPOINT") or None,
+        region_name=os.environ.get("FW_S3_REGION", "us-east-1"),
+        aws_access_key_id=os.environ.get("FW_S3_ACCESS_KEY") or os.environ.get("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=(
-            os.environ.get("AFL_S3_SECRET_KEY") or os.environ.get("AWS_SECRET_ACCESS_KEY")
+            os.environ.get("FW_S3_SECRET_KEY") or os.environ.get("AWS_SECRET_ACCESS_KEY")
         ),
     )
 

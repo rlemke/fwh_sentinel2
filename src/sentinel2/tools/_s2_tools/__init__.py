@@ -11,7 +11,7 @@ effects. Modules:
 - ``map_render`` — change raster -> web tiles + MapLibre HTML
 - ``s2_mocks``   — deterministic offline fixtures (``use_mock=True``)
 
-The cache is rooted at ``$AFL_CACHE_ROOT/s2/`` (namespace ``s2``).
+The cache is rooted at ``$FW_CACHE_ROOT/s2/`` (namespace ``s2``).
 """
 
 NAMESPACE = "s2"

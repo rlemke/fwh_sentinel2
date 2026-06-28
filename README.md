@@ -25,11 +25,11 @@ pip install -e ".[geo,s3]"       # + write cache/output to S3/MinIO (boto3)
 ### Storage (local or S3)
 
 All I/O goes through `_s2_tools/storage.py`. Default is local disk
-(`$AFL_CACHE_ROOT`, `$AFL_OUTPUT_BASE` / `~/afl_data`). Set `AFL_STORAGE=s3`
-(+ `AFL_DATA_ROOT=s3://<bucket>` and the usual `AFL_S3_*` endpoint/creds) and the
+(`$FW_CACHE_ROOT`, `$FW_OUTPUT_BASE` / `~/afl_data`). Set `FW_STORAGE=s3`
+(+ `FW_DATA_ROOT=s3://<bucket>` and the usual `FW_S3_*` endpoint/creds) and the
 cache lands at `s3://<bucket>/cache/s2/…` and the rendered map bundle at
 `s3://<bucket>/output/s2/…` — which the dashboard's `/output/raw` artifact server
-serves directly (point it at the same prefix with `AFL_S3_OUTPUT_BASE`). So a
+serves directly (point it at the same prefix with `FW_S3_OUTPUT_BASE`). So a
 fleet run renders straight to MinIO and is viewable from the Runs list.
 
 ## What it does
@@ -59,7 +59,7 @@ Then **`s2.analyze.DetectChange`** — `method`:
 Both emit the same loss/stable/gain raster, so **`s2.render.ChangeMap`** (a
 georeferenced `change.tif` + an XYZ PNG pyramid + a MapLibre viewer over a CARTO
 basemap) is method-agnostic. Every scene raster and composite is content-addressed
-in `$AFL_CACHE_ROOT/s2/`, so changing the threshold/method/epoch re-uses everything
+in `$FW_CACHE_ROOT/s2/`, so changing the threshold/method/epoch re-uses everything
 already fetched.
 
 ### Surface water over time (`WaterTimeSeries`)
@@ -134,7 +134,7 @@ the resolution env:
 > - **`months_from`/`months_to`**: pick the region's **dry/clear season** (Florida:
 >   `01-01`→`04-30`) — fewer clouds → far less year-to-year detection noise.
 > - **`buffer_km=0`** fits the AOI to the geocoder's lake bbox (vs an off-center
->   buffer box that clips), and **`AFL_S2_MAX_SIZE=1024`** (set on the runner)
+>   buffer box that clips), and **`FW_S2_MAX_SIZE=1024`** (set on the runner)
 >   reads ~58 m/px instead of 115 m (≈2048 ≈ Landsat-native 30 m).
 >
 > **Ceiling (honest):** optical water indices map **open water**, not emergent

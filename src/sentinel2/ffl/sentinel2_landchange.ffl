@@ -6,7 +6,7 @@
 // can feed the same composite/change/render path. Each event facet wraps one
 // `_s2_tools` function; handlers are thin dispatchers that import from
 // `_s2_tools/` via a sys.path shim. The runtime and the terminal exercise
-// identical logic against one cache rooted at `$AFL_CACHE_ROOT/s2/`.
+// identical logic against one cache rooted at `$FW_CACHE_ROOT/s2/`.
 //
 // Open data:   Sentinel-2 L2A, free, via the Element84 Earth Search STAC API
 //              (https://earth-search.aws.element84.com/v1) over AWS Open Data.
