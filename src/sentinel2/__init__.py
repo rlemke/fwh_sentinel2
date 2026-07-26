@@ -9,8 +9,8 @@ declared in ``pyproject.toml``::
     sentinel2-landchange = "sentinel2:domain"
 
 Once ``pip install -e .`` has been run from this repository, Facetwork's
-``scripts/start-runner --example sentinel2-landchange`` and
-``scripts/seed-examples`` pick this package up automatically — no edits to the
+``fw runner start --domain sentinel2-landchange`` and
+``fw ffl seed`` pick this package up automatically — no edits to the
 Facetwork repository required.
 """
 

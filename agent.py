@@ -8,7 +8,7 @@ handlers in this package.
 Usage::
 
     # From a Facetwork checkout (preferred — handles env + seeding):
-    scripts/start-runner --example sentinel2-landchange
+    fw runner start --domain sentinel2-landchange
 
     # Or directly, once `pip install -e .` has registered the package:
     python agent.py

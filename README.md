@@ -6,7 +6,7 @@ render the result as a tiled MapLibre map. Built on open data and open algorithm
 shows off Facetwork's per-scene fan-out, content-addressed caching, and the
 source-adapter shape.
 
-Discovered by the Facetwork runner via the `facetwork.examples` entry point — no
+Discovered by the Facetwork runner via the `facetwork.domains` entry point — no
 edits to the Facetwork repo required.
 
 > **Worked examples:** see [`EXAMPLES.md`](EXAMPLES.md) for end-to-end lake
@@ -169,7 +169,7 @@ the resolution env:
 
 ```bash
 # from a Facetwork checkout, after pip install -e:
-scripts/start-runner --example sentinel2-landchange -- --log-format text
+fw runner start --domain sentinel2-landchange -- --log-format text
 scripts/ffl-run $(python -c "import sentinel2,os;print(os.path.join(os.path.dirname(sentinel2.__file__),'ffl','sentinel2_landchange.ffl'))") \
   --workflow s2.workflows.AnalyzeAOI \
   --inputs '{"use_mock": true, "method": "classify"}' --task-list s2
