@@ -13,6 +13,27 @@ edits to the Facetwork repo required.
 > water-level-vs-extent studies (Great Salt Lake, Okeechobee, Clear Lake) — the
 > FFL workflows, the `tools/` CLIs, and what each reveals (and its limits).
 
+## Feature specifications
+
+Per-feature specs live in [`docs/`](docs/README.md) — one document per feature, each
+covering how it works, fleet fan-out, data/fields, external libraries, facets &
+workflows, and cache/output. Start with [**workflows**](docs/workflows.md) (the
+flagship — the pipelines you actually run).
+
+| Spec | What it covers |
+|------|----------------|
+| [workflows](docs/workflows.md) | **Flagship** — the entry-point compositions (`AnalyzeAOI`/`AnalyzeRegion` + the `WaterTimeSeries` family). |
+| [source-adapters](docs/source-adapters.md) | `s2.source` — STAC search + COG index read; Sentinel-2 / Landsat provider routing. |
+| [change-detection](docs/change-detection.md) | `s2.analyze` — median composite + `difference`/`classify`/`water` change detection. |
+| [change-map](docs/change-map.md) | `s2.render` — change raster → GeoTIFF + XYZ tiles + MapLibre viewer. |
+| [fan-out](docs/fan-out.md) | `foreach` fleet parallelism — per-scene (`ScanScenes`) and per-year (`ScanYears`). |
+| [water-timeseries](docs/water-timeseries.md) | `s2.timeseries` — multi-year water viewer (year slider + area chart + gauge overlay). |
+| [gauges](docs/gauges.md) | `s2.level` — USGS level, gauge auto-discovery, USGS + USBR reservoir storage. |
+| [geocoding](docs/geocoding.md) | `s2.geo` — Nominatim place name → AOI bbox. |
+| [cache-and-storage](docs/cache-and-storage.md) | Local-or-S3 backend + per-entry sidecar cache. |
+
+See [`docs/README.md`](docs/README.md) for the full index.
+
 ## Install
 
 ```bash
