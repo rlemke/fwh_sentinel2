@@ -38,6 +38,7 @@ are in [`../EXAMPLES.md`](../EXAMPLES.md).
 | [water-timeseries.md](water-timeseries.md) | `s2.timeseries` — the multi-year water viewer: year slider/tab bar + area chart, with an optional dual-axis gauge overlay. |
 | [gauges.md](gauges.md) | `s2.level` — USGS NWIS level, gauge auto-discovery by name, USGS reservoir storage, and USBR (Powell/Mead) storage/elevation. |
 | [geocoding.md](geocoding.md) | `s2.geo` — Nominatim place name → AOI bbox; `buffer_km` as the fan-out governor. |
+| [ffl-examples.md](ffl-examples.md) | **Usage patterns.** A gallery of complete, compile-checked FFL examples over these facets — search→fan-out→composite, parallel epochs, custom-mixin overrides, `catch`, `when` cloud guards, nested year fan-out. |
 
 ---
 

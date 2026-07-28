@@ -13,6 +13,49 @@ edits to the Facetwork repo required.
 > water-level-vs-extent studies (Great Salt Lake, Okeechobee, Clear Lake) — the
 > FFL workflows, the `tools/` CLIs, and what each reveals (and its limits).
 
+## FFL at a glance
+
+The pipeline is written in [FFL](https://github.com/rlemke/facetwork/blob/main/docs/reference/language/grammar.md),
+Facetwork's workflow language. A step is `name = Facet(args)`; a step that
+references another waits for it, and `ScanScenes` fans the per-scene work out
+across the fleet:
+
+```ffl
+namespace my.s2 {
+
+    use s2.source
+    use s2.scan
+    use s2.analyze
+
+    /** One epoch: search scenes, fan out per scene, reduce to a composite. */
+    workflow OneComposite(aoi: String = "-122.55,37.70,-122.35,37.85",
+        date_from: String = "2024-06-01", date_to: String = "2024-09-30") => (path: String, scenes: Int) andThen {
+
+        search = s2.source.SearchScenes(
+            aoi = $.aoi, date_from = $.date_from, date_to = $.date_to, max_cloud = 20.0)
+
+        scan = s2.scan.ScanScenes(scene_ids = search.scene_ids, aoi = $.aoi, index = "ndvi")
+
+        comp = s2.analyze.Composite(
+            aoi = $.aoi, date_from = $.date_from, date_to = $.date_to,
+            scene_ids = search.scene_ids, index = "ndvi", reducer = "median",
+            dependency_signal = scan.count)
+
+        yield OneComposite(path = comp.relative_path, scenes = comp.scene_count)
+    }
+}
+```
+
+```bash
+fw ffl run --primary my.ffl --library src/sentinel2/ffl/sentinel2_landchange.ffl \
+  --workflow my.s2.OneComposite
+```
+
+📖 **[docs/ffl-examples.md](docs/ffl-examples.md)** — the full example gallery:
+two epochs in parallel then compare, writing your own fan-out, nested fan-out over
+years, overriding this domain's own `RetryPolicy` mixin at a call site, `catch`,
+and `when` guards on cloud cover. Every snippet there is compile-checked.
+
 ## Feature specifications
 
 Per-feature specs live in [`docs/`](docs/README.md) — one document per feature, each
