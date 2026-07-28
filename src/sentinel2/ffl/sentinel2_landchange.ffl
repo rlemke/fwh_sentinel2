@@ -374,8 +374,8 @@ namespace s2.workflows {
             base = Composite(
                 aoi = $.aoi, date_from = $.baseline_from, date_to = $.baseline_to,
                 scene_ids = base_search.scene_ids, index = $.index,
-                dependency_signal = base_scan.count, use_mock = $.use_mock
-            )
+                use_mock = $.use_mock
+            ) after base_scan
             recent_search = SearchScenes(
                 aoi = $.aoi, date_from = $.recent_from, date_to = $.recent_to,
                 max_cloud = $.max_cloud, use_mock = $.use_mock
@@ -386,16 +386,15 @@ namespace s2.workflows {
             recent = Composite(
                 aoi = $.aoi, date_from = $.recent_from, date_to = $.recent_to,
                 scene_ids = recent_search.scene_ids, index = $.index,
-                dependency_signal = recent_scan.count, use_mock = $.use_mock
-            )
+                use_mock = $.use_mock
+            ) after recent_scan
             change = DetectChange(
                 baseline_path = base.relative_path, recent_path = recent.relative_path,
                 aoi_key = base.aoi_key, method = $.method, threshold = $.threshold, use_mock = $.use_mock
             )
             map = ChangeMap(
-                change_path = change.relative_path, aoi_key = change.aoi_key,
-                dependency_signal = change.changed_pixels
-            )
+                change_path = change.relative_path, aoi_key = change.aoi_key
+            ) after change
             yield AnalyzeAOI(
                 status = "completed",
                 html_path = map.html_path,
@@ -471,8 +470,8 @@ namespace s2.workflows {
                 date_from = $.year ++ "-" ++ $.months_from,
                 date_to = $.year ++ "-" ++ $.months_to,
                 scene_ids = search.scene_ids, index = $.index,
-                dependency_signal = scan.count, use_mock = $.use_mock
-            )
+                use_mock = $.use_mock
+            ) after scan
             yield WaterYear(relative_path = comp.relative_path, scene_count = comp.scene_count)
         }
 
@@ -527,9 +526,8 @@ namespace s2.workflows {
             )
             map = WaterTimeSeriesMap(
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
-                months_from = $.months_from, months_to = $.months_to,
-                dependency_signal = scanned.count
-            )
+                months_from = $.months_from, months_to = $.months_to
+            ) after scanned
             yield WaterTimeSeries(
                 status = "completed", html_path = map.html_path,
                 aoi = loc.aoi, year_count = map.year_count
@@ -582,9 +580,8 @@ namespace s2.workflows {
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
                 title = "Lake water: level vs. extent",
                 months_from = $.months_from, months_to = $.months_to,
-                level_relative_path = level.relative_path,
-                dependency_signal = scanned.count
-            )
+                level_relative_path = level.relative_path
+            ) after scanned
             yield WaterLevelTimeSeries(
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
                 year_count = map.year_count, level_points = level.point_count,
@@ -639,9 +636,8 @@ namespace s2.workflows {
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
                 title = "Reservoir water: storage vs. extent",
                 months_from = $.months_from, months_to = $.months_to,
-                level_relative_path = storage.relative_path,
-                dependency_signal = scanned.count
-            )
+                level_relative_path = storage.relative_path
+            ) after scanned
             yield WaterStorageTimeSeries(
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
                 year_count = map.year_count, storage_points = storage.point_count,
@@ -690,9 +686,8 @@ namespace s2.workflows {
                 aoi = loc.aoi, index = $.index, water_threshold = $.water_threshold,
                 title = "Reservoir water: USBR storage vs. extent",
                 months_from = $.months_from, months_to = $.months_to,
-                level_relative_path = storage.relative_path,
-                dependency_signal = scanned.count
-            )
+                level_relative_path = storage.relative_path
+            ) after scanned
             yield ReservoirStorageUSBR(
                 status = "completed", html_path = map.html_path, aoi = loc.aoi,
                 year_count = map.year_count, storage_points = storage.point_count,
