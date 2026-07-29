@@ -113,9 +113,9 @@ namespace s2.scan {
 
 namespace s2.analyze {
     /** Reduce the cached per-scene index rasters for an AOI + date window into a
-      * single cloud-robust composite (median by default). `dependency_signal`
-      * lets the runtime sequence this after the ScanScenes fan-out that produced
-      * the inputs. */
+      * single cloud-robust composite (median by default). Reads what the
+      * ScanScenes fan-out cached, so callers must order it with
+      * `after <scan step>` — no value flows between them. */
     event facet Composite(
         aoi: String,
         date_from: String,
@@ -123,7 +123,6 @@ namespace s2.analyze {
         scene_ids: Json,
         index: String = "ndvi",
         reducer: String = "median",
-        dependency_signal: Long = 0,
         use_mock: Boolean = false
     ) => (
         cache_type: String,
@@ -181,14 +180,13 @@ namespace s2.analyze {
 
 namespace s2.render {
     /** Render the change raster as web tiles + a MapLibre HTML viewer (loss in
-      * red, gain in green, over a basemap). `dependency_signal` sequences this
-      * after DetectChange. */
+      * red, gain in green, over a basemap). Order it with `after <detect step>`
+      * when it reads the change raster from cache rather than by path. */
     event facet ChangeMap(
         change_path: String,
         aoi_key: String,
         title: String = "Sentinel-2 land-cover change",
-        basemap_url: String = "",
-        dependency_signal: Int = 0
+        basemap_url: String = ""
     ) => (
         aoi_key: String,
         output_dir: String,
@@ -203,8 +201,8 @@ namespace s2.timeseries {
     /** Render a multi-year surface-water viewer: discover the per-year NDWI
       * composites in cache, tile each year's water extent, and emit a MapLibre
       * HTML with a year slider / tab bar + a water-area-over-time chart. So you
-      * scrub the years and watch a lake shrink. `dependency_signal` sequences
-      * this after the ScanYears fan-out that produced the composites. */
+      * scrub the years and watch a lake shrink. Reads the composites the
+      * ScanYears fan-out cached, so order it with `after <scan step>`. */
     event facet WaterTimeSeriesMap(
         aoi: String,
         index: String = "ndwi",
@@ -213,8 +211,7 @@ namespace s2.timeseries {
         basemap_url: String = "",
         months_from: String = "",
         months_to: String = "",
-        level_relative_path: String = "",
-        dependency_signal: Long = 0
+        level_relative_path: String = ""
     ) => (aoi_key: String, output_dir: String, html_path: String, year_count: Int)
         with Effect(kind = "io")
         with Cost(tier = "cheap")
