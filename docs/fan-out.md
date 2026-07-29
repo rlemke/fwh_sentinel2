@@ -34,11 +34,11 @@ Each loop iteration becomes an independent runtime step running one
 `FetchSceneIndex`; the loop variable is bound on the block's `$` surface and read as
 `$.sid` (relative-scoping rule). Every step writes its AOI-clipped raster to the
 shared `scene-index` cache, so the downstream `Composite` reduce finds them all.
-The `yield ScanScenes(count = 1)` per iteration is a counter the caller sequences on
-via `dependency_signal` — `Composite` takes `dependency_signal = base_scan.count`
-so the runtime schedules the reduce **after** the fan-out that produced its inputs
-(there is no data edge otherwise, since scenes flow through the cache, not the
-payload).
+The `yield ScanScenes(count = 1)` per iteration is a progress counter, not the
+ordering mechanism: the caller writes `Composite(…) after base_scan`, so the runtime
+schedules the reduce **after** every iteration of the fan-out that produced its
+inputs. The clause is required precisely because there is no data edge — scenes flow
+through the cache, not the step payload.
 
 `ScanYears` fans `WaterYear` over a `years` Json list; each `WaterYear` runs its own
 `SearchScenes → ScanScenes → Composite` for that year's seasonal window, landing one
@@ -57,8 +57,8 @@ cache — no shared in-process dispatcher.
 
 - **`scene_ids: Json`** — the array from `SearchScenes` that `ScanScenes` iterates.
 - **`years: Json`** — the array `ScanYears` iterates (e.g. `["2017","2019","2022"]`).
-- **`count: Long`** — the per-iteration `yield` value the reduce sequences on via
-  `dependency_signal` (a `Long`/`Int` throughout the FFL).
+- **`count: Long`** — the per-iteration `yield` value, reported for visibility; the
+  reduce is ordered by an `after` clause, not by this number.
 - No filtering here; `exclude_platforms` filtering happens inside the wrapped
   `SearchScenes` (see [source-adapters](source-adapters.md)).
 
@@ -85,10 +85,10 @@ No new cache type of their own. `ScanScenes` populates the `scene-index` cache (
 
 ## Gotchas & notes
 
-- **`dependency_signal` is how the reduce waits.** Because per-scene rasters move
-  through the cache and not the step payload, `Composite`/renderers must be
-  sequenced explicitly — always thread `dependency_signal = <scan>.count`. Dropping
-  it risks a composite reducing over an incomplete scene set.
+- **`after` is how the reduce waits.** Because per-scene rasters move through the
+  cache and not the step payload, `Composite`/renderers must be sequenced
+  explicitly — always write `after <scan>`. Dropping it risks a composite reducing
+  over an incomplete scene set.
 - **Composite scoping by `scene_ids` separates epochs.** Baseline and recent share
   one `aoi+index` cache namespace; the composite is scoped to *its* epoch's
   `scene_ids` so the two don't reduce over the same mixed set (see

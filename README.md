@@ -38,8 +38,8 @@ namespace my.s2 {
 
         comp = s2.analyze.Composite(
             aoi = $.aoi, date_from = $.date_from, date_to = $.date_to,
-            scene_ids = search.scene_ids, index = "ndvi", reducer = "median",
-            dependency_signal = scan.count)
+            scene_ids = search.scene_ids, index = "ndvi", reducer = "median"
+            ) after scan
 
         yield OneComposite(path = comp.relative_path, scenes = comp.scene_count)
     }

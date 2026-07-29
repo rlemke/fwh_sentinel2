@@ -25,9 +25,9 @@ If you only read one spec, read this — it shows how the [source-adapters](sour
 
 **Land-cover change.** `AnalyzeAOI` runs, per epoch (baseline + recent):
 `SearchScenes → ScanScenes (fan-out) → Composite`, then `DetectChange` (baseline vs
-recent) → `ChangeMap`. Each `Composite` takes `dependency_signal = <scan>.count` so
-it waits for its fan-out; `ChangeMap` takes `dependency_signal = change.changed_pixels`
-so it waits for the change step. `AnalyzeRegion` is a thin front: `ResolveAOI(place)`
+recent) → `ChangeMap`. Each `Composite` is written `after <scan>` so it waits for
+its whole fan-out; `ChangeMap` is written `after change` so it waits for the change
+step. `AnalyzeRegion` is a thin front: `ResolveAOI(place)`
 → `AnalyzeAOI(aoi = loc.aoi, …)`, yielding the geocoder's `display_name` + bbox in
 its `detail`.
 

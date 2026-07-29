@@ -28,7 +28,7 @@ are in [`../EXAMPLES.md`](../EXAMPLES.md).
 
 | Spec | What it covers |
 |------|----------------|
-| [fan-out.md](fan-out.md) | The `foreach` fleet parallelism: `ScanScenes` (per scene) and `ScanYears`/`WaterYear` (per year) — the fan-out-of-fan-outs, sequenced via `dependency_signal`. |
+| [fan-out.md](fan-out.md) | The `foreach` fleet parallelism: `ScanScenes` (per scene) and `ScanYears`/`WaterYear` (per year) — the fan-out-of-fan-outs, with the reduce ordered by `after`. |
 | [cache-and-storage.md](cache-and-storage.md) | The local-or-S3 backend + per-entry `.meta.json` sidecar cache (content-addressed, lock-free) shared by the CLI and the runtime. |
 
 ## Water time series & inputs

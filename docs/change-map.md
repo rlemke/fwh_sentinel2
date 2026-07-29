@@ -37,8 +37,8 @@ branch on which path ran.
 
 ## Fan-out
 
-**Single-task — no fan-out.** One render per change raster. It is sequenced after
-`DetectChange` via `dependency_signal = change.changed_pixels` in the workflows.
+**Single-task — no fan-out.** One render per change raster. The workflows order it
+`after change`, the `DetectChange` step.
 
 ## Data & fields
 
@@ -65,11 +65,11 @@ branch on which path ran.
 
 | Facet | Kind | Effect / Cost | Purpose |
 |---|---|---|---|
-| `ChangeMap(change_path, aoi_key, title="Sentinel-2 land-cover change", basemap_url="", dependency_signal=0) => (aoi_key, output_dir, html_path, tiles_path)` | event | io / cheap | Render the change raster as XYZ tiles + a MapLibre HTML viewer |
+| `ChangeMap(change_path, aoi_key, title="Sentinel-2 land-cover change", basemap_url="") => (aoi_key, output_dir, html_path, tiles_path)` | event | io / cheap | Render the change raster as XYZ tiles + a MapLibre HTML viewer |
 
 `Effect(kind="io")` (it writes an output bundle), `Cost(tier="cheap")`. No
-`RetryPolicy` (no remote reads). `dependency_signal: Int` sequences it after
-`DetectChange`.
+`RetryPolicy` (no remote reads). Callers order it `after` the `DetectChange` step —
+it reads that step's raster from the cache.
 
 ## Cache / output
 

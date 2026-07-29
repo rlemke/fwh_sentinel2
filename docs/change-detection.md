@@ -46,7 +46,7 @@ and writes a `change` `.npz`. Three methods:
 
 **Single-task — no fan-out.** Both are reduces/compares over the whole AOI in one
 process. The parallelism they depend on happened upstream in
-[fan-out](fan-out.md); `Composite` is sequenced after it via `dependency_signal`.
+[fan-out](fan-out.md); `Composite` is ordered behind it with `after`.
 
 ## Data & fields
 
@@ -76,11 +76,11 @@ process. The parallelism they depend on happened upstream in
 
 | Facet | Kind | Effect / Cost | Purpose |
 |---|---|---|---|
-| `Composite(aoi, date_from, date_to, scene_ids: Json, index="ndvi", reducer="median", dependency_signal=0, use_mock=false) => (RasterResult fields)` | event | pure / moderate | Median/mean composite over an epoch's cached scene rasters |
+| `Composite(aoi, date_from, date_to, scene_ids: Json, index="ndvi", reducer="median", use_mock=false) => (RasterResult fields)` | event | pure / moderate | Median/mean composite over an epoch's cached scene rasters |
 | `DetectChange(baseline_path, recent_path, aoi_key, method="difference", threshold=0.15, use_mock=false) => (relative_path, aoi_key, method, changed_pixels, total_pixels, pct_loss, pct_gain, class_counts: Json, size_bytes, sha256)` | event | pure / cheap | Compare two composites → loss/stable/gain change raster + stats |
 
-`Composite` carries `dependency_signal: Long` so the runtime sequences it after the
-`ScanScenes` fan-out. Neither carries `RetryPolicy` (no network).
+Callers write `Composite(…) after <scan>` so the runtime sequences it after the
+whole `ScanScenes` fan-out. Neither carries `RetryPolicy` (no network).
 
 ## Cache / output
 

@@ -43,7 +43,7 @@ timeline.
 ## Fan-out
 
 **Single-task — no fan-out.** It is a reduce/render over the per-year composites the
-`ScanYears` fan-out already produced, sequenced after it via `dependency_signal`.
+`ScanYears` fan-out already produced, ordered behind it with `after`.
 The per-year parallelism lives in [fan-out](fan-out.md).
 
 ## Data & fields
@@ -72,10 +72,10 @@ The per-year parallelism lives in [fan-out](fan-out.md).
 
 | Facet | Kind | Effect / Cost | Purpose |
 |---|---|---|---|
-| `WaterTimeSeriesMap(aoi, index="ndwi", water_threshold=0.1, title="Surface water over time", basemap_url="", months_from="", months_to="", level_relative_path="", dependency_signal=0) => (aoi_key, output_dir, html_path, year_count)` | event | io / cheap | Render the per-year water-extent viewer (+ optional gauge overlay) |
+| `WaterTimeSeriesMap(aoi, index="ndwi", water_threshold=0.1, title="Surface water over time", basemap_url="", months_from="", months_to="", level_relative_path="") => (aoi_key, output_dir, html_path, year_count)` | event | io / cheap | Render the per-year water-extent viewer (+ optional gauge overlay) |
 
-`Effect(kind="io")`, `Cost(tier="cheap")`. `dependency_signal: Long` sequences it
-after `ScanYears`. It is the render leaf of the `WaterTimeSeries` /
+`Effect(kind="io")`, `Cost(tier="cheap")`. Callers order it `after ScanYears` —
+naming a `foreach` step waits for every iteration. It is the render leaf of the `WaterTimeSeries` /
 `WaterLevelTimeSeries` / `WaterStorageTimeSeries` / `ReservoirStorageUSBR` workflows
 (see [workflows](workflows.md)).
 

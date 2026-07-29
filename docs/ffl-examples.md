@@ -32,9 +32,9 @@ authoritative.
 | `s2.source.SearchScenes(aoi, date_from, date_to, max_cloud, …) => (count, scene_ids: Json)` | STAC search → a Json list of scene ids |
 | `s2.source.FetchSceneIndex(scene_id, aoi, index, …) => (relative_path, …)` | One scene → one cached index raster |
 | `s2.scan.ScanScenes(scene_ids: Json, aoi, index, …) => (count)` | **Reusable fan-out workflow**: `FetchSceneIndex` per scene |
-| `s2.analyze.Composite(aoi, date_from, date_to, scene_ids, index, reducer, dependency_signal, …)` | Cloud-robust median composite over the cached scenes |
+| `s2.analyze.Composite(aoi, date_from, date_to, scene_ids, index, reducer, …)` | Cloud-robust median composite over the cached scenes |
 | `s2.analyze.DetectChange(baseline_path, recent_path, aoi_key, method, threshold, …)` | Baseline vs recent → change raster + stats |
-| `s2.render.ChangeMap(change_path, aoi_key, title, …, dependency_signal)` | Tiles + MapLibre viewer |
+| `s2.render.ChangeMap(change_path, aoi_key, title, …)` | Tiles + MapLibre viewer |
 | `s2.workflows.AnalyzeAOI(...)` / `AnalyzeRegion(place, …)` | The shipped end-to-end pipelines |
 | `s2.workflows.WaterTimeSeries` / `WaterLevelTimeSeries` / … | Multi-year water families |
 
@@ -60,8 +60,8 @@ extra error handling, or a pipeline that stops after the composite.
 ## 2. The smallest useful workflow — search → fan out → composite
 
 Three steps, and the whole distributed shape is visible: a search that returns a
-list, a fan-out workflow over that list, and a fan-in composite sequenced by
-`dependency_signal`.
+list, a fan-out workflow over that list, and a fan-in composite ordered with
+`after`.
 
 ```ffl
 namespace my.s2 {
@@ -85,8 +85,8 @@ namespace my.s2 {
             date_to = $.date_to,
             scene_ids = search.scene_ids,
             index = "ndvi",
-            reducer = "median",
-            dependency_signal = scan.count)
+            reducer = "median"
+            ) after scan
 
         yield OneComposite(path = comp.relative_path, scenes = comp.scene_count)
     }
@@ -119,15 +119,15 @@ namespace my.s2 {
         base_scan = s2.scan.ScanScenes(scene_ids = base_search.scene_ids, aoi = $.aoi, index = "ndvi")
         base = s2.analyze.Composite(
             aoi = $.aoi, date_from = $.baseline_from, date_to = $.baseline_to,
-            scene_ids = base_search.scene_ids, index = "ndvi",
-            dependency_signal = base_scan.count)
+            scene_ids = base_search.scene_ids, index = "ndvi"
+            ) after base_scan
 
         recent_search = s2.source.SearchScenes(aoi = $.aoi, date_from = $.recent_from, date_to = $.recent_to)
         recent_scan = s2.scan.ScanScenes(scene_ids = recent_search.scene_ids, aoi = $.aoi, index = "ndvi")
         recent = s2.analyze.Composite(
             aoi = $.aoi, date_from = $.recent_from, date_to = $.recent_to,
-            scene_ids = recent_search.scene_ids, index = "ndvi",
-            dependency_signal = recent_scan.count)
+            scene_ids = recent_search.scene_ids, index = "ndvi"
+            ) after recent_scan
 
         change = s2.analyze.DetectChange(
             baseline_path = base.relative_path,
@@ -139,8 +139,8 @@ namespace my.s2 {
         map = s2.render.ChangeMap(
             change_path = change.relative_path,
             aoi_key = change.aoi_key,
-            title = "NDVI change",
-            dependency_signal = change.changed_pixels)
+            title = "NDVI change"
+            ) after change
 
         yield MyChangeMap(html_path = map.html_path, pct_loss = change.pct_loss)
     }
@@ -311,7 +311,7 @@ namespace my.s2 {
 | Read a workflow/step parameter | `$.name` (`$$.name` one level out) |
 | Read a previous step's result | `stepname.field` |
 | Run steps in parallel | write them with no reference between them |
-| Order steps that share only a cache | pass an upstream field as `dependency_signal` |
+| Order steps that share only a cache | `step = Facet(…) after other` |
 | Fan out over a list | `workflow W(items: Json) … andThen foreach i in $.items { … }` |
 | Reuse a fan-out | call the fan-out **workflow** as a step (`s2.scan.ScanScenes`) |
 | Override a mixin for one call | `… with RetryPolicy(max_retries = 8) with Timeout(minutes = 30)` |
